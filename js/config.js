@@ -1,28 +1,9 @@
 /**
- * ============================================================================
- * js/config.js — ARTIST CONFIGURATION (Your main control panel for edits)
- * Edit your avatar, streaming platforms, social links, and Railway endpoints here.
- * ============================================================================
- */
-
-/**
- * ARTIST PROFILE PHOTO
- * Upload a photo (e.g., "profile_picture.png") to your GitHub repo's root folder
- * and set this to "./profile_picture.png", OR paste any direct image URL.
- * Leave as "" to keep the default "rv" Y2K emblem.
- */
-export const ARTIST_AVATAR_URL = "./assets/PFP_v1.png";
-
-/**
- * OFFICIAL WEBSITE URL (Used by the Share button)
- */
-export const SHARE_URL = "https://www.raveyns.com";
-
-/**
- * VERCEL + MONGODB SIGNUP API ENDPOINT
- * Points to the serverless function at /api/signup.js
+ * VERCEL + MONGODB AUTH API ENDPOINTS
+ * Point to the serverless functions at /api/signup.js and /api/login.js
  */
 export const SIGNUP_API_URL = "/api/signup";
+export const LOGIN_API_URL = "/api/login";
 
 /**
  * STREAMING PLATFORMS & SOCIAL CHANNELS
