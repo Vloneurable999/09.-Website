@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>raveyn's club</title>
+  <meta name="description" content="the official club for raveyn. Stream recent uploads, follow socials, and track live YouTube milestones." />
+
+  <!-- Google Fonts: Inter (Primary UI) & JetBrains Mono (Subtle Y2K Metadata) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Tailwind Configuration for Fonts & Subtle Y2K Glows -->
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          boxShadow: {
+            'neon-pink': '0 0 28px -4px rgba(236, 72, 153, 0.35)',
+            'neon-purple': '0 0 28px -4px rgba(168, 85, 247, 0.35)',
+          },
+        },
+      },
+    };
+  </script>
+</head>
+
+<body class="bg-[#07050c] text-zinc-100 font-sans antialiased selection:bg-fuchsia-500/30 selection:text-fuchsia-200 overflow-x-hidden min-h-screen relative">
+
+  <!-- Ambient Y2K Neon Background Glows (Non-interactive) -->
+  <div aria-hidden="true" class="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+    <!-- Top-left purple orb -->
+    <div class="absolute -top-32 -left-24 w-80 h-80 sm:w-[28rem] sm:h-[28rem] rounded-full bg-purple-600/20 blur-3xl"></div>
+    <!-- Mid-right pink orb -->
+    <div class="absolute top-1/3 -right-28 w-72 h-72 sm:w-[26rem] sm:h-[26rem] rounded-full bg-pink-600/15 blur-3xl"></div>
+    <!-- Bottom-center fuchsia orb -->
+    <div class="absolute -bottom-36 left-1/2 -translate-x-1/2 w-96 h-72 rounded-full bg-fuchsia-600/15 blur-3xl"></div>
+    <!-- Subtle Y2K dot grid overlay -->
+    <div class="absolute inset-0 opacity-[0.07] bg-[radial-gradient(#e879f9_1px,transparent_1px)] [background-size:24px_24px]"></div>
+  </div>
+
+  <!-- Sticky Glassmorphic Header -->
+  <header class="sticky top-0 z-40 w-full px-4 pt-4">
+    <nav class="max-w-4xl mx-auto flex items-center justify-between px-4 sm:px-5 py-3 rounded-2xl bg-zinc-950/65 backdrop-blur-xl border border-white/10 shadow-lg shadow-black/40">
+      <!-- Brand Wordmark -->
+      <a id="brandHomeLink" href="#top" class="flex items-center gap-2.5 group focus:outline-none">
+        <!-- Y2K 4-Point Chrome Sparkle Icon -->
+        <span class="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-purple-500/25 via-fuchsia-500/20 to-pink-500/25 border border-fuchsia-400/30 group-hover:border-fuchsia-400/70 transition-colors">
+          <svg class="w-4 h-4 text-fuchsia-300 group-hover:rotate-45 transition-transform duration-300" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 1L14.8 9.2L23 12L14.8 14.8L12 23L9.2 14.8L1 12L9.2 9.2L12 1Z" />
+          </svg>
+        </span>
+        <span class="text-base sm:text-lg font-bold tracking-tight whitespace-nowrap bg-gradient-to-r from-white via-fuchsia-100 to-purple-300 bg-clip-text text-transparent">
+          raveyn's club
+        </span>
+      </a>
+
+      <!-- Quick Section Anchors (Hidden on tiny screens, shown sm+) -->
+      <div class="hidden sm:flex items-center gap-1 text-xs font-medium text-zinc-400">
+        <a href="#socials" data-hub-link class="px-3 py-2 rounded-xl hover:text-white hover:bg-white/5 transition-colors">Socials</a>
+        <a href="#uploads" data-hub-link class="px-3 py-2 rounded-xl hover:text-white hover:bg-white/5 transition-colors">Uploads</a>
+      </div>
+
+      <!-- Header Action Buttons -->
+      <div class="flex items-center gap-2">
+        <!-- Log In Button (Hidden automatically when signed in) -->
+        <button
+          id="navLoginBtn"
+          type="button"
+          class="inline-flex items-center px-3 py-2 rounded-xl text-xs font-medium text-zinc-200 bg-white/[0.04] border border-white/10 hover:text-white hover:border-fuchsia-400/40 hover:bg-white/[0.08] active:scale-95 transition-all cursor-pointer"
+        >
+          Log In
+        </button>
+
+        <!-- Sign Up / Member Pass Toggle Button -->
+        <button
+          id="navSignupBtn"
+          type="button"
+          class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600/80 via-fuchsia-600/80 to-pink-600/80 border border-fuchsia-400/40 hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 shadow-neon-purple active:scale-95 transition-all cursor-pointer"
+        >
+          <span id="navSignupLabel">Join Club</span>
+        </button>
+
+        <!-- Share Hub Button -->
+        <button
+          id="shareBtn"
+          type="button"
+          class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium text-fuchsia-200 bg-fuchsia-500/10 border border-fuchsia-400/25 hover:bg-fuchsia-500/20 hover:border-fuchsia-400/50 active:scale-95 transition-all cursor-pointer"
+          aria-label="Copy website link"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="18" cy="5" r="3"></circle>
+            <circle cx="6" cy="12" r="3"></circle>
+            <circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+          </svg>
+          <span class="hidden sm:inline">Share</span>
+        </button>
+      </div>
+    </nav>
+  </header>
+
+  <!-- Main Content Container -->
+  <main id="top" class="max-w-4xl mx-auto px-4 pt-8 pb-20 space-y-10">
+
+    <!-- 1. HERO / ARTIST IDENTITY & SPOTIFY CARD -->
+    <section class="relative overflow-hidden rounded-3xl bg-white/[0.03] backdrop-blur-xl border border-white/10 p-6 sm:p-8 shadow-2xl shadow-black/50">
+      <!-- Subtle top gradient hairline -->
+      <div aria-hidden="true" class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-fuchsia-400/60 to-transparent"></div>
+
+      <!-- Two-Column Responsive Layout: Artist Identity (Left) + Spotify Embed (Right) -->
+      <div class="grid grid-cols-1 md:grid-cols-12 items-center gap-6 md:gap-8">
+        <!-- Left Side: Profile Photo, Official Artist Club Pill, Artist Name & YouTube Counter -->
+        <div class="md:col-span-5 flex flex-col items-center md:items-start text-center md:text-left">
+          <!-- Stylized Y2K Chrome / Neon Emblem / Profile Photo -->
+          <div class="relative mb-5 w-24 h-24 sm:w-28 sm:h-28 rounded-3xl p-[2px] bg-gradient-to-br from-purple-500 via-fuchsia-400 to-pink-500 shadow-neon-purple">
+            <div id="artistAvatarContainer" class="w-full h-full rounded-[22px] bg-[#0b0714] flex items-center justify-center relative overflow-hidden">
+              <!-- Decorative vinyl/orbit rings -->
+              <div class="absolute inset-2 rounded-full border border-fuchsia-400/20"></div>
+              <div class="absolute inset-5 rounded-full border border-purple-400/20"></div>
+              <span class="relative text-3xl sm:text-4xl font-extrabold tracking-tighter bg-gradient-to-b from-white via-fuchsia-200 to-purple-400 bg-clip-text text-transparent select-none">
+                rv
+              </span>
+            </div>
+          </div>
+
+          <!-- Status Pill -->
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-fuchsia-500/10 border border-fuchsia-400/20 mb-3">
+            <span class="w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse"></span>
+            <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-fuchsia-200/90">Official Artist Club</span>
+          </div>
+
+          <!-- Artist Name -->
+          <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight bg-gradient-to-r from-white via-fuchsia-200 to-pink-300 bg-clip-text text-transparent pb-1">
+            raveyn
+          </h1>
+
+          <!-- Live YouTube Subscriber Counter (Under Profile Picture & Name) -->
+          <div id="live" class="mt-5 w-full max-w-[318px] scroll-mt-24">
+            <div class="flex items-center justify-between gap-2 mb-2 px-1">
+              <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-fuchsia-300/80 flex items-center gap-1.5">
+                <span class="text-pink-400">✦</span> YouTube Subscribers
+              </span>
+              <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono text-pink-300 bg-pink-500/10 border border-pink-500/25">
+                <span class="w-1.5 h-1.5 rounded-full bg-pink-400 animate-ping"></span>
+                LIVE
+              </span>
+            </div>
+
+            <div class="w-full flex items-center justify-center p-2 rounded-2xl bg-zinc-950/90 border border-fuchsia-500/25 shadow-inner overflow-x-auto hover:border-fuchsia-500/45 transition-colors">
+              <div class="rounded-xl overflow-hidden leading-none">
+                <iframe height="80px" width="300px" frameborder="0" src="https://livecounts.io/embed/youtube-live-subscriber-counter/UCNa9Uv9N1U6q7LzL-cCbSnA" class="block rounded-xl" style="border: 0; width:300px; height:80px; border-radius: 12px;"></iframe>
+              </div>
+            </div>
+
+            <a
+              href="https://www.youtube.com/@raveyn"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="mt-2.5 w-full inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-pink-200 bg-pink-500/10 border border-pink-400/25 hover:bg-pink-500/20 hover:border-pink-400/50 transition-all"
+            >
+              <span>Visit @raveyn on YouTube</span>
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="7" y1="17" x2="17" y2="7"></line>
+                <polyline points="7 7 17 7 17 17"></polyline>
+              </svg>
+            </a>
+          </div>
+        </div>
+
+        <!-- Right Side: Spotify Songs Embed -->
+        <div id="uploads" class="md:col-span-7 w-full scroll-mt-24">
+          <div class="flex items-center justify-between gap-2 mb-2 px-1">
+            <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-fuchsia-300/80 flex items-center gap-1.5">
+              <span class="text-fuchsia-400">✦</span> Top Tracks
+            </span>
+            <span class="font-mono text-[11px] text-zinc-500">Spotify</span>
+          </div>
+          <div class="rounded-2xl bg-zinc-950/60 border border-white/10 p-2 hover:border-fuchsia-500/35 transition-colors">
+            <iframe
+              data-testid="embed-iframe"
+              style="border-radius:12px"
+              src="https://open.spotify.com/embed/artist/4TQ0jOKwGZFjmSnqR27MvF?utm_source=generator&theme=0&si=e2dd050012244af6"
+              width="100%"
+              height="352"
+              frameBorder="0"
+              allowfullscreen=""
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              loading="lazy"
+              title="raveyn on Spotify">
+            </iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. MUSIC PLATFORMS SECTION -->
+    <section id="music" class="scroll-mt-24">
+      <div class="flex items-center justify-between mb-3 px-1">
+        <h2 class="font-mono text-xs uppercase tracking-[0.22em] text-fuchsia-300/80 flex items-center gap-2">
+          <span class="text-purple-400">✦</span> Stream Music
+        </h2>
+      </div>
+
+      <!-- Dynamically populated from ARTIST_CONFIG.musicPlatforms -->
+      <div id="musicGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-3.5"></div>
+    </section>
+
+    <!-- 3. SOCIALS SECTION -->
+    <section id="socials" class="scroll-mt-24">
+      <div class="flex items-center justify-between mb-3 px-1">
+        <h2 class="font-mono text-xs uppercase tracking-[0.22em] text-fuchsia-300/80 flex items-center gap-2">
+          <span class="text-pink-400">✦</span> Socials
+        </h2>
+      </div>
+
+      <!-- Dynamically populated from ARTIST_CONFIG.socials -->
+      <div id="socialsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5"></div>
+    </section>
+  </main>
+
+  <!-- DEDICATED SIGN UP / LOG IN PAGE VIEW (Hidden by default) -->
+  <section id="signupPage" class="hidden max-w-lg mx-auto px-4 pt-8 pb-20">
+    <!-- Back to Hub Button -->
+    <button
+      id="backToHubBtn"
+      type="button"
+      class="mb-6 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-zinc-300 bg-white/[0.03] border border-white/10 hover:text-white hover:border-fuchsia-400/40 transition-all cursor-pointer"
+    >
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      <span>Back to Artist Hub</span>
+    </button>
+
+    <!-- Sign Up / Log In Card Container -->
+    <div class="relative overflow-hidden rounded-3xl bg-white/[0.03] backdrop-blur-xl border border-white/10 p-6 sm:p-8 shadow-2xl shadow-black/50">
+      <!-- Top Neon Hairline -->
+      <div aria-hidden="true" class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-fuchsia-400/70 to-transparent"></div>
+
+      <!-- Auth Mode Switcher Tabs (Sign Up / Log In) -->
+      <div id="authTabs" class="grid grid-cols-2 gap-1.5 p-1 mb-6 rounded-2xl bg-zinc-950/70 border border-white/10" role="tablist">
+        <button
+          id="tabSignupBtn"
+          type="button"
+          role="tab"
+          class="py-2 rounded-xl text-xs font-semibold text-white bg-fuchsia-500/25 border border-fuchsia-400/40 transition-all cursor-pointer"
+        >
+          Join Club
+        </button>
+        <button
+          id="tabLoginBtn"
+          type="button"
+          role="tab"
+          class="py-2 rounded-xl text-xs font-medium text-zinc-400 border border-transparent hover:text-zinc-200 transition-all cursor-pointer"
+        >
+          Log In
+        </button>
+      </div>
+
+      <!-- SIGN UP FORM VIEW -->
+      <div id="signupFormView">
+        <div class="text-center mb-7">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-fuchsia-500/10 border border-fuchsia-400/20 mb-3">
+            <span class="w-2 h-2 rounded-full bg-pink-400 animate-pulse"></span>
+            <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-fuchsia-200/90">Member Access</span>
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-fuchsia-200 to-pink-300 bg-clip-text text-transparent">
+            Join raveyn's club
+          </h1>
+          <p class="mt-2 text-xs sm:text-sm text-zinc-400">
+            Sign up for early access to unreleased tracks, demos, and exclusive drops.
+          </p>
+        </div>
+
+        <!-- Inline Error Box -->
+        <div id="signupError" class="hidden mb-4 px-4 py-3 rounded-2xl bg-rose-500/10 border border-rose-400/30 text-xs text-rose-200" role="alert"></div>
+
+        <form id="signupForm" class="space-y-4" novalidate>
+          <!-- Handle / Display Name -->
+          <div>
+            <label for="signupHandle" class="block font-mono text-[11px] uppercase tracking-wider text-zinc-400 mb-1.5">
+              Username / Handle
+            </label>
+            <input
+              id="signupHandle"
+              name="handle"
+              type="text"
+              required
+              autocomplete="username"
+              placeholder="@yourname"
+              class="w-full px-4 py-3 rounded-2xl bg-zinc-950/70 border border-white/10 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-fuchsia-400/60 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
+            />
+          </div>
+
+          <!-- Email Address -->
+          <div>
+            <label for="signupEmail" class="block font-mono text-[11px] uppercase tracking-wider text-zinc-400 mb-1.5">
+              Email Address
+            </label>
+            <input
+              id="signupEmail"
+              name="email"
+              type="email"
+              required
+              autocomplete="email"
+              placeholder="you@example.com"
+              class="w-full px-4 py-3 rounded-2xl bg-zinc-950/70 border border-white/10 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-fuchsia-400/60 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
+            />
+          </div>
+
+          <!-- Password with Visibility Toggle -->
+          <div>
+            <label for="signupPassword" class="block font-mono text-[11px] uppercase tracking-wider text-zinc-400 mb-1.5">
+              Password
+            </label>
+            <div class="relative">
+              <input
+                id="signupPassword"
+                name="password"
+                type="password"
+                required
+                minlength="6"
+                autocomplete="new-password"
+                placeholder="At least 6 characters"
+                class="w-full px-4 py-3 pr-16 rounded-2xl bg-zinc-950/70 border border-white/10 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-fuchsia-400/60 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
+              />
+              <button
+                id="togglePasswordBtn"
+                type="button"
+                class="absolute right-3 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-[11px] font-mono text-zinc-400 hover:text-fuchsia-300 transition-colors cursor-pointer"
+              >
+                Show
+              </button>
+            </div>
+          </div>
+
+          <!-- Drop Notifications Opt-In -->
+          <label class="flex items-start gap-3 p-3 rounded-2xl bg-white/[0.02] border border-white/10 cursor-pointer hover:border-fuchsia-400/30 transition-colors">
+            <input
+              id="signupOptIn"
+              type="checkbox"
+              checked
+              class="mt-0.5 w-4 h-4 rounded accent-fuchsia-500 cursor-pointer"
+            />
+            <span class="text-xs text-zinc-300 leading-relaxed">
+              Notify me about new singles, private SoundCloud demos, and upcoming club drops.
+            </span>
+          </label>
+
+          <!-- Submit Button -->
+          <button
+            id="signupSubmitBtn"
+            type="submit"
+            class="w-full py-3.5 px-5 rounded-2xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 shadow-neon-pink active:scale-[0.99] transition-all cursor-pointer"
+          >
+            Create Member Pass ✦
+          </button>
+        </form>
+      </div>
+
+      <!-- LOG IN FORM VIEW -->
+      <div id="loginFormView" class="hidden">
+        <div class="text-center mb-7">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-400/20 mb-3">
+            <span class="w-2 h-2 rounded-full bg-fuchsia-400 animate-pulse"></span>
+            <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-fuchsia-200/90">Welcome Back</span>
+          </div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-fuchsia-200 to-pink-300 bg-clip-text text-transparent">
+            Log in to raveyn's club
+          </h1>
+          <p class="mt-2 text-xs sm:text-sm text-zinc-400">
+            Access your digital member pass and club perks.
+          </p>
+        </div>
+
+        <!-- Inline Error Box -->
+        <div id="loginError" class="hidden mb-4 px-4 py-3 rounded-2xl bg-rose-500/10 border border-rose-400/30 text-xs text-rose-200" role="alert"></div>
+
+        <form id="loginForm" class="space-y-4" novalidate>
+          <!-- Email or Username -->
+          <div>
+            <label for="loginIdentifier" class="block font-mono text-[11px] uppercase tracking-wider text-zinc-400 mb-1.5">
+              Email or Username
+            </label>
+            <input
+              id="loginIdentifier"
+              name="identifier"
+              type="text"
+              required
+              autocomplete="username"
+              placeholder="@yourname or you@example.com"
+              class="w-full px-4 py-3 rounded-2xl bg-zinc-950/70 border border-white/10 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-fuchsia-400/60 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
+            />
+          </div>
+
+          <!-- Password with Visibility Toggle -->
+          <div>
+            <label for="loginPassword" class="block font-mono text-[11px] uppercase tracking-wider text-zinc-400 mb-1.5">
+              Password
+            </label>
+            <div class="relative">
+              <input
+                id="loginPassword"
+                name="password"
+                type="password"
+                required
+                autocomplete="current-password"
+                placeholder="Enter your password"
+                class="w-full px-4 py-3 pr-16 rounded-2xl bg-zinc-950/70 border border-white/10 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-fuchsia-400/60 focus:ring-2 focus:ring-fuchsia-500/20 transition-all"
+              />
+              <button
+                id="toggleLoginPasswordBtn"
+                type="button"
+                class="absolute right-3 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg text-[11px] font-mono text-zinc-400 hover:text-fuchsia-300 transition-colors cursor-pointer"
+              >
+                Show
+              </button>
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <button
+            id="loginSubmitBtn"
+            type="submit"
+            class="w-full py-3.5 px-5 rounded-2xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 shadow-neon-purple active:scale-[0.99] transition-all cursor-pointer"
+          >
+            Log In ✦
+          </button>
+        </form>
+      </div>
+
+      <!-- MEMBER PASS CONFIRMATION VIEW (Shown after signing up or logging in) -->
+      <div id="memberPassView" class="hidden text-center space-y-6">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/30">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-emerald-200">Welcome to the Club</span>
+        </div>
+
+        <!-- Stylized Y2K Digital Member Card -->
+        <div class="relative overflow-hidden rounded-2xl p-[1.5px] bg-gradient-to-br from-purple-500 via-fuchsia-400 to-pink-500 shadow-neon-purple text-left">
+          <div class="rounded-[15px] bg-[#0b0714] p-5 sm:p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="font-mono text-xs uppercase tracking-[0.2em] text-fuchsia-300">✦ raveyn's club</span>
+              <span id="memberPassId" class="font-mono text-xs text-zinc-400">#RV-0001</span>
+            </div>
+            <div>
+              <p class="font-mono text-[10px] uppercase tracking-wider text-zinc-500">Member</p>
+              <p id="memberPassHandle" class="text-xl font-bold text-white truncate">@member</p>
+              <p id="memberPassEmail" class="text-xs font-mono text-zinc-400 truncate mt-0.5">member@example.com</p>
+            </div>
+            <div class="pt-3 border-t border-white/10 flex items-center justify-between text-[11px] font-mono text-zinc-400">
+              <span id="memberPassAlerts">Drops: Enabled</span>
+              <span class="text-fuchsia-300">ACTIVE</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button
+            id="passBackBtn"
+            type="button"
+            class="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-fuchsia-500/20 border border-fuchsia-400/40 hover:bg-fuchsia-500/30 transition-all cursor-pointer"
+          >
+            Explore Artist Hub
+          </button>
+          <button
+            id="signOutBtn"
+            type="button"
+            class="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-medium text-zinc-400 bg-white/[0.03] border border-white/10 hover:text-rose-300 hover:border-rose-400/30 transition-all cursor-pointer"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Minimalist Y2K Footer -->
+  <footer class="border-t border-white/10 bg-zinc-950/50 backdrop-blur-md">
+    <div class="max-w-4xl mx-auto px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-zinc-500">
+      <p class="font-mono">
+        &copy; <span id="currentYear">2026</span> <span class="text-zinc-300">raveyn</span>. All rights reserved.
+      </p>
+      <a href="#top" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/10 text-zinc-400 hover:text-fuchsia-300 hover:border-fuchsia-400/30 transition-colors">
+        <span>Back to top</span>
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 15l-6-6-6 6" />
+        </svg>
+      </a>
+    </div>
+  </footer>
+
+  <!-- Toast Notification Box (Replaces browser alert) -->
+  <div
+    id="toast"
+    role="status"
+    aria-live="polite"
+    class="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-zinc-900/95 border border-fuchsia-400/40 text-xs font-medium text-fuchsia-100 shadow-neon-pink backdrop-blur-xl opacity-0 pointer-events-none translate-y-3 transition-all duration-300"
+  >
+    Link copied to clipboard!
+  </div>
+
+  <!-- Modular Application Entry Point -->
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
