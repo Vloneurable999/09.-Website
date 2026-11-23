@@ -1,37 +1,38 @@
 /**
  * ============================================================================
  * js/main.js — APPLICATION ENTRY POINT
- * Boots the Artist Hub, shared UI helpers, and Club Sign Up module on load.
+ * Boots each module independently so an error in one file never blocks others.
  * ============================================================================
  */
-import { handleShareClick, renderArtistAvatar } from "./ui.js";
-import { renderMusicPlatforms, renderSocials } from "./hub.js";
-import { initSignup } from "./signup.js";
-
-function bootApp() {
+async function bootApp() {
   const yearEl = document.getElementById("currentYear");
   if (yearEl) yearEl.textContent = new Date().getFullYear();
 
-  const shareBtn = document.getElementById("shareBtn");
-  if (shareBtn) shareBtn.addEventListener("click", handleShareClick);
-
+  // 1. Load Music & Socials cards first so they always render
   try {
-    renderArtistAvatar();
-  } catch (error) {
-    console.error("Avatar error:", error);
-  }
-
-  try {
+    const { renderMusicPlatforms, renderSocials } = await import("./hub.js");
     renderMusicPlatforms();
     renderSocials();
   } catch (error) {
-    console.error("Hub render error:", error);
+    console.error("Failed to load hub.js (Music & Socials):", error);
   }
 
+  // 2. Load Avatar & Share button
   try {
+    const { handleShareClick, renderArtistAvatar } = await import("./ui.js");
+    const shareBtn = document.getElementById("shareBtn");
+    if (shareBtn) shareBtn.addEventListener("click", handleShareClick);
+    renderArtistAvatar();
+  } catch (error) {
+    console.error("Failed to load ui.js:", error);
+  }
+
+  // 3. Load Sign Up / Log In module independently
+  try {
+    const { initSignup } = await import("./signup.js");
     initSignup();
   } catch (error) {
-    console.error("Signup init error:", error);
+    console.error("Failed to load signup.js:", error);
   }
 }
 
