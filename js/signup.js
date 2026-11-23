@@ -139,53 +139,6 @@ function updateMemberUI() {
 /**
  * Handles club signup form validation, MongoDB API POST, and member pass creation.
  */
-export function showView(view) {
-  const hubMain = document.getElementById("top");
-  const signupPage = document.getElementById("signupPage");
-  if (!hubMain || !signupPage) return;
-
-  if (view === "signup") {
-    hubMain.classList.add("hidden");
-    signupPage.classList.remove("hidden");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  } else {
-    signupPage.classList.add("hidden");
-    hubMain.classList.remove("hidden");
-  }
-}
-
-/**
- * Updates the Sign Up / Member Pass UI based on current in-memory session state.
- */
-function updateMemberUI() {
-  const navLabel = document.getElementById("navSignupLabel");
-  const formView = document.getElementById("signupFormView");
-  const passView = document.getElementById("memberPassView");
-
-  if (currentMember) {
-    if (navLabel) navLabel.textContent = currentMember.handle;
-    if (formView) formView.classList.add("hidden");
-    if (passView) passView.classList.remove("hidden");
-
-    const idEl = document.getElementById("memberPassId");
-    const handleEl = document.getElementById("memberPassHandle");
-    const emailEl = document.getElementById("memberPassEmail");
-    const alertsEl = document.getElementById("memberPassAlerts");
-
-    if (idEl) idEl.textContent = currentMember.memberId;
-    if (handleEl) handleEl.textContent = currentMember.handle;
-    if (emailEl) emailEl.textContent = currentMember.email;
-    if (alertsEl) alertsEl.textContent = currentMember.optInDrops ? "Drops: Enabled" : "Drops: Paused";
-  } else {
-    if (navLabel) navLabel.textContent = "Join Club";
-    if (passView) passView.classList.add("hidden");
-    if (formView) formView.classList.remove("hidden");
-  }
-}
-
-/**
- * Handles club signup form validation, optional Railway POST, and member pass creation.
- */
 async function handleSignupSubmit(event) {
   event.preventDefault();
 

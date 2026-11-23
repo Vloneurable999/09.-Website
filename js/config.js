@@ -1,4 +1,13 @@
 /**
+ * ============================================================================
+ * js/config.js — ARTIST CONFIGURATION
+ * Edit your profile photo, share URL, API endpoints, and links here.
+ * ============================================================================
+ */
+export const ARTIST_AVATAR_URL = "./assets/PFP_v1.png";
+export const SHARE_URL = "https://www.raveyns.com";
+
+/**
  * VERCEL + MONGODB AUTH API ENDPOINTS
  * Point to the serverless functions at /api/signup.js and /api/login.js
  */
