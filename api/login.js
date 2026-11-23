@@ -2,7 +2,7 @@
  * ============================================================================
  * api/login.js — VERCEL SERVERLESS FUNCTION (MONGODB ATLAS)
  * Handles POST /api/login requests, verifies scrypt password hashes using
- * timing-safe comparison, and returns the returning member's club pass.
+ * timing-safe comparison, and supports logging in by email or username/handle.
  * ============================================================================
  */
 import { MongoClient } from "mongodb";

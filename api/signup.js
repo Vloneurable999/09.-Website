@@ -2,7 +2,8 @@
  * ============================================================================
  * api/signup.js — VERCEL SERVERLESS FUNCTION (MONGODB ATLAS)
  * Handles POST /api/signup requests, securely hashes passwords with Node's
- * built-in crypto module, prevents duplicate emails, and saves members to MongoDB.
+ * built-in crypto module, prevents duplicate emails/usernames, and saves
+ * members to MongoDB.
  * ============================================================================
  */
 import { MongoClient } from "mongodb";
