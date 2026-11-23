@@ -8,19 +8,35 @@ import { handleShareClick, renderArtistAvatar } from "./ui.js";
 import { renderMusicPlatforms, renderSocials } from "./hub.js";
 import { initSignup } from "./signup.js";
 
-document.addEventListener("DOMContentLoaded", () => {
+function bootApp() {
+  const yearEl = document.getElementById("currentYear");
+  if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+  const shareBtn = document.getElementById("shareBtn");
+  if (shareBtn) shareBtn.addEventListener("click", handleShareClick);
+
   try {
-    const yearEl = document.getElementById("currentYear");
-    if (yearEl) yearEl.textContent = new Date().getFullYear();
-
-    const shareBtn = document.getElementById("shareBtn");
-    if (shareBtn) shareBtn.addEventListener("click", handleShareClick);
-
-    initSignup();
     renderArtistAvatar();
+  } catch (error) {
+    console.error("Avatar error:", error);
+  }
+
+  try {
     renderMusicPlatforms();
     renderSocials();
   } catch (error) {
-    console.error("Initialization error:", error);
+    console.error("Hub render error:", error);
   }
-});
+
+  try {
+    initSignup();
+  } catch (error) {
+    console.error("Signup init error:", error);
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootApp);
+} else {
+  bootApp();
+}
