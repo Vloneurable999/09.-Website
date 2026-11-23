@@ -19,11 +19,10 @@ export const ARTIST_AVATAR_URL = "./assets/PFP_v1.png";
 export const SHARE_URL = "https://www.raveyns.com";
 
 /**
- * OPTIONAL RAILWAY BACKEND ENDPOINTS
- * Paste your Railway URLs here when you're ready to connect a backend database.
+ * VERCEL + MONGODB SIGNUP API ENDPOINT
+ * Points to the serverless function at /api/signup.js
  */
-export const RAILWAY_API_URL = ""; // Example: "https://raveyn-api.up.railway.app/api/uploads"
-export const RAILWAY_SIGNUP_API_URL = ""; // Example: "https://raveyn-api.up.railway.app/api/signup"
+export const SIGNUP_API_URL = "/api/signup";
 
 /**
  * STREAMING PLATFORMS & SOCIAL CHANNELS

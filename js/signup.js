@@ -1,13 +1,42 @@
 /**
  * ============================================================================
  * js/signup.js — CLUB SIGN UP & MEMBER PASS MODULE
- * Manages view switching (Hub <-> Sign Up), validation, Railway POST, and Member Pass UI.
+ * Manages view switching (Hub <-> Sign Up), validation, MongoDB API POST, and Member Pass UI.
  * ============================================================================
  */
-import { RAILWAY_SIGNUP_API_URL } from "./config.js";
+import { SIGNUP_API_URL } from "./config.js";
 import { showToast } from "./ui.js";
 
-let currentMember = null;
+const MEMBER_STORAGE_KEY = "raveyn_club_member";
+
+/**
+ * Loads the saved member pass from localStorage (if any).
+ */
+function loadSavedMember() {
+  try {
+    const raw = localStorage.getItem(MEMBER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persists or clears the member pass in localStorage.
+ */
+function saveMember(member) {
+  try {
+    if (member) {
+      localStorage.setItem(MEMBER_STORAGE_KEY, JSON.stringify(member));
+    } else {
+      localStorage.removeItem(MEMBER_STORAGE_KEY);
+    }
+  } catch (err) {
+    console.warn("Could not access localStorage:", err);
+  }
+}
+
+let currentMember = loadSavedMember();
 
 /**
  * Switches between the main Artist Hub view and the dedicated Sign Up page.
@@ -89,27 +118,25 @@ async function handleSignupSubmit(event) {
   }
 
   try {
-    // If a Railway backend endpoint is configured, submit the signup there
-    if (RAILWAY_SIGNUP_API_URL) {
-      const response = await fetch(RAILWAY_SIGNUP_API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ handle: formattedHandle, email, password, optInDrops }),
-      });
-      if (!response.ok) throw new Error("Could not complete signup right now.");
+    // Submit signup to the Vercel serverless function connected to MongoDB Atlas
+    const response = await fetch(SIGNUP_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ handle: formattedHandle, email, password, optInDrops }),
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.error || "Could not complete signup right now.");
     }
 
-    const randomNum = String(Math.floor(1000 + Math.random() * 9000));
-    currentMember = {
-      memberId: `#RV-${randomNum}`,
-      handle: formattedHandle,
-      email,
-      optInDrops,
-    };
+    currentMember = data.member;
+    saveMember(currentMember);
 
     document.getElementById("signupForm")?.reset();
     updateMemberUI();
-    showToast(`Welcome to raveyn's club, ${formattedHandle}!`);
+    showToast(`Welcome to raveyn's club, ${currentMember.handle}!`);
   } catch (err) {
     showError(err.message || "Something went wrong. Please try again.");
   } finally {
@@ -166,10 +193,14 @@ export function initSignup() {
   if (signOutBtn) {
     signOutBtn.addEventListener("click", () => {
       currentMember = null;
+      saveMember(null);
       updateMemberUI();
       showToast("Signed out of raveyn's club.");
     });
   }
+
+  // Restore saved Member Pass UI on page load
+  updateMemberUI();
 
   // Support direct links to /#signup
   const syncRouteFromHash = () => {
