@@ -68,10 +68,20 @@ export default async function handler(req, res) {
     const db = await getDatabase();
     const members = db.collection("members");
 
-    // Prevent duplicate signups with the same email
-    const existingMember = await members.findOne({ email: cleanEmail });
+    // Prevent duplicate signups with the same email or username (case-insensitive)
+    const escapedHandle = formattedHandle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const existingMember = await members.findOne({
+      $or: [
+        { email: cleanEmail },
+        { handle: { $regex: `^${escapedHandle}$`, $options: "i" } },
+      ],
+    });
     if (existingMember) {
-      return res.status(409).json({ error: "An account with this email is already in the club." });
+      const conflictMsg =
+        existingMember.email === cleanEmail
+          ? "An account with this email is already in the club."
+          : "That username is already taken. Please choose another.";
+      return res.status(409).json({ error: conflictMsg });
     }
 
     // Generate sequential club pass number (e.g., #RV-0001, #RV-0002)

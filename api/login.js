@@ -41,6 +41,13 @@ function verifyPassword(password, storedHash) {
   return crypto.timingSafeEqual(derivedKey, storedKey);
 }
 
+/**
+ * Escapes special regex characters for safe case-insensitive handle lookup.
+ */
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
@@ -48,13 +55,13 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { email, password } = req.body || {};
+    const { identifier, email, handle, password } = req.body || {};
 
-    const cleanEmail = String(email || "").trim().toLowerCase();
+    const rawIdentifier = String(identifier || email || handle || "").trim();
     const cleanPassword = String(password || "");
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      return res.status(400).json({ error: "Please enter a valid email address." });
+    if (!rawIdentifier) {
+      return res.status(400).json({ error: "Please enter your email or username." });
     }
     if (!cleanPassword) {
       return res.status(400).json({ error: "Please enter your password." });
@@ -63,9 +70,22 @@ export default async function handler(req, res) {
     const db = await getDatabase();
     const members = db.collection("members");
 
-    const member = await members.findOne({ email: cleanEmail });
+    // Check if the user entered an email address or a username/handle
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawIdentifier);
+    let query;
+
+    if (isEmail) {
+      query = { email: rawIdentifier.toLowerCase() };
+    } else {
+      const normalizedHandle = rawIdentifier.startsWith("@")
+        ? rawIdentifier
+        : `@${rawIdentifier}`;
+      query = { handle: { $regex: `^${escapeRegex(normalizedHandle)}$`, $options: "i" } };
+    }
+
+    const member = await members.findOne(query);
     if (!member || !verifyPassword(cleanPassword, member.passwordHash)) {
-      return res.status(401).json({ error: "Invalid email or password." });
+      return res.status(401).json({ error: "Invalid email/username or password." });
     }
 
     // Return safe member data (never return passwordHash)
