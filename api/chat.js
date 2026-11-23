@@ -67,9 +67,10 @@ export default async function handler(req, res) {
         typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
       const cleanMemberId = String(body.memberId || "").trim();
       const cleanHandle = String(body.handle || "").trim();
+      const cleanEmail = String(body.email || "").trim().toLowerCase();
       const cleanText = String(body.text || "").trim();
 
-      if (!cleanMemberId || !cleanHandle) {
+      if (!cleanHandle || (!cleanMemberId && !cleanEmail)) {
         return res.status(401).json({ error: "Please log in to post in the club chat." });
       }
       if (!cleanText) {
@@ -81,12 +82,13 @@ export default async function handler(req, res) {
         });
       }
 
-      // Verify that this member pass actually exists in MongoDB
+      // Verify that this logged-in member exists in MongoDB (by memberId or email)
       const membersCollection = db.collection("members");
-      const member = await membersCollection.findOne({
-        memberId: cleanMemberId,
-        handle: cleanHandle,
-      });
+      const lookupClauses = [];
+      if (cleanMemberId) lookupClauses.push({ memberId: cleanMemberId });
+      if (cleanEmail) lookupClauses.push({ email: cleanEmail });
+
+      const member = await membersCollection.findOne({ $or: lookupClauses });
 
       if (!member) {
         return res.status(401).json({

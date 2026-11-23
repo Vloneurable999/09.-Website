@@ -15,6 +15,7 @@ const ARTIST_HANDLES = new Set(["@raveyn", "@itsraveyn"]);
 let pollTimer = null;
 let lastRenderedKey = "";
 let isSending = false;
+let cachedMember = null;
 
 /**
  * Safely escapes HTML entities to prevent XSS in chat messages.
@@ -29,14 +30,29 @@ function escapeHtml(str) {
 }
 
 /**
- * Reads the currently signed-in member pass from localStorage.
+ * Reads the currently signed-in member pass from memory or localStorage.
+ * Matches signup.js validation (handle + email or memberId) so an already
+ * logged-in viewer is never asked to log in again.
  */
 function getCurrentMember() {
+  if (cachedMember && cachedMember.handle && (cachedMember.memberId || cachedMember.email)) {
+    return cachedMember;
+  }
+
+  const shared = window.__raveynsCurrentMember;
+  if (shared && shared.handle && (shared.memberId || shared.email)) {
+    cachedMember = shared;
+    return cachedMember;
+  }
+
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed || !parsed.memberId || !parsed.handle) return null;
+    if (!parsed || typeof parsed !== "object" || !parsed.handle || (!parsed.memberId && !parsed.email)) {
+      return null;
+    }
+    cachedMember = parsed;
     return parsed;
   } catch {
     return null;
@@ -82,7 +98,11 @@ function setChatError(message = "") {
 /**
  * Toggles between the active message composer and the logged-out prompt.
  */
-function syncChatAuthUI() {
+function syncChatAuthUI(explicitMember) {
+  if (explicitMember !== undefined) {
+    cachedMember = explicitMember || null;
+  }
+
   const member = getCurrentMember();
   const form = document.getElementById("chatForm");
   const lockedPrompt = document.getElementById("chatLockedPrompt");
@@ -92,7 +112,8 @@ function syncChatAuthUI() {
     form?.classList.remove("hidden");
     lockedPrompt?.classList.add("hidden");
     if (activeUserLabel) {
-      activeUserLabel.textContent = `Posting as ${member.handle} (${member.memberId})`;
+      const idSuffix = member.memberId ? ` (${member.memberId})` : "";
+      activeUserLabel.textContent = `Posting as ${member.handle}${idSuffix}`;
     }
   } else {
     form?.classList.add("hidden");
@@ -109,7 +130,7 @@ function renderMessages(messages, forceScroll = false) {
 
   const member = getCurrentMember();
   const renderKey = JSON.stringify({
-    me: member?.memberId || "",
+    me: member?.memberId || member?.handle || "",
     ids: messages.map((m) => m.id),
   });
 
@@ -133,7 +154,10 @@ function renderMessages(messages, forceScroll = false) {
 
   container.innerHTML = messages
     .map((msg) => {
-      const isMine = member && msg.memberId === member.memberId;
+      const isMine =
+        member &&
+        ((member.memberId && msg.memberId === member.memberId) ||
+          String(msg.handle || "").toLowerCase() === String(member.handle || "").toLowerCase());
       const isArtist = ARTIST_HANDLES.has(String(msg.handle || "").toLowerCase());
       const safeHandle = escapeHtml(msg.handle);
       const safeId = escapeHtml(msg.memberId);
@@ -242,8 +266,9 @@ async function handleChatSubmit(event) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        memberId: member.memberId,
+        memberId: member.memberId || "",
         handle: member.handle,
+        email: member.email || "",
         text,
       }),
     });
@@ -326,9 +351,19 @@ export function initChat() {
   });
 
   // Re-sync chat UI whenever the user logs in, signs up, or signs out
-  window.addEventListener("raveyns:auth-changed", () => {
-    syncChatAuthUI();
+  window.addEventListener("raveyns:auth-changed", (event) => {
+    syncChatAuthUI(event.detail?.member ?? null);
     lastRenderedKey = "";
     fetchMessages({ silent: true, forceScroll: false });
+  });
+
+  // Also sync automatically if the user logs in/out in another browser tab
+  window.addEventListener("storage", (event) => {
+    if (event.key === STORAGE_KEY) {
+      cachedMember = null;
+      syncChatAuthUI();
+      lastRenderedKey = "";
+      fetchMessages({ silent: true, forceScroll: false });
+    }
   });
 }
