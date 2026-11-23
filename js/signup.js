@@ -258,6 +258,7 @@ async function handleLoginSubmit(event) {
  * Wires up all navigation, hash routing, and form listeners for Sign Up & Log In.
  */
 export function initSignup() {
+  const brandHomeLink = document.getElementById("brandHomeLink");
   const navLoginBtn = document.getElementById("navLoginBtn");
   const navSignupBtn = document.getElementById("navSignupBtn");
   const tabSignupBtn = document.getElementById("tabSignupBtn");
@@ -302,6 +303,14 @@ export function initSignup() {
     history.replaceState(null, "", window.location.pathname);
     showView("hub");
   };
+
+  if (brandHomeLink) {
+    brandHomeLink.addEventListener("click", (event) => {
+      event.preventDefault();
+      returnToHub();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
 
   if (backToHubBtn) backToHubBtn.addEventListener("click", returnToHub);
   if (passBackBtn) passBackBtn.addEventListener("click", returnToHub);
