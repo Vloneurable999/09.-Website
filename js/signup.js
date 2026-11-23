@@ -354,7 +354,8 @@ export function initSignup() {
     signOutBtn.addEventListener("click", () => {
       currentMember = null;
       saveMember(null);
-      setAuthMode("login");
+      authMode = "login";
+      updateMemberUI();
       showToast("Signed out of raveyn's club.");
     });
   }
