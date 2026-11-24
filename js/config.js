@@ -130,20 +130,6 @@ export function getMemberRole(memberId = "", dbRole = "", handle = "", dbBadges 
   return getMemberBadges(memberId, dbBadges, dbRole, handle)[0];
 }
 
-  if (!roleKey && normalizedDbRole && MEMBER_ROLES[normalizedDbRole]) {
-    roleKey = normalizedDbRole;
-  }
-
-  if (!roleKey) {
-    const numMatch = normalizedId.match(/^#RV-(\d+)$/);
-    const passNumber = numMatch ? parseInt(numMatch[1], 10) : 0;
-    roleKey = passNumber === 1 ? "artist" : "member";
-  }
-
-  const roleConfig = MEMBER_ROLES[roleKey] || MEMBER_ROLES.member;
-  return { key: roleKey, ...roleConfig };
-}
-
 /**
  * STREAMING PLATFORMS & SOCIAL CHANNELS
  */

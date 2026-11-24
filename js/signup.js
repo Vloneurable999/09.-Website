@@ -14,7 +14,8 @@ const OG_PROMO_CUTOFF = new Date("2026-12-01T23:59:59-06:00");
 let currentMember = null;
 
 /**
- * Loads the saved member pass from localStorage if valid.
+ * Loads the saved member pass from localStorage if valid, and automatically
+ * upgrades legacy sessions that predate the stacked badges system.
  */
 function loadSavedMember() {
   try {
@@ -25,6 +26,21 @@ function loadSavedMember() {
       localStorage.removeItem(STORAGE_KEY);
       return null;
     }
+
+    // Upgrade old browser sessions that don't have a badges array yet
+    if (!Array.isArray(parsed.badges) || parsed.badges.length === 0) {
+      const seedBadges = new Date() <= OG_PROMO_CUTOFF ? ["og"] : [];
+      const resolved = getMemberBadges(
+        parsed.memberId,
+        seedBadges,
+        parsed.role,
+        parsed.handle
+      );
+      parsed.badges = resolved.map((b) => b.key);
+      parsed.role = parsed.badges[0] || "member";
+      saveMember(parsed);
+    }
+
     return parsed;
   } catch (err) {
     console.warn("Unable to read saved member from localStorage:", err);

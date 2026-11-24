@@ -11,6 +11,7 @@ import crypto from "crypto";
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || "raveyns_club";
 const OG_PROMO_CUTOFF = new Date("2026-12-01T23:59:59-06:00");
+const BADGE_PRIORITY = ["artist", "admin", "mod", "vip", "og", "member"];
 
 /**
  * Reuse the MongoDB connection across warm Vercel serverless invocations.
@@ -75,18 +76,48 @@ export default async function handler(req, res) {
 
     const db = await getDatabase();
     const members = db.collection("members");
+
+    // Look up member by email (if input contains "@email.domain") or by username/handle
+    const isEmailLookup = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawIdentifier);
+    let member = null;
+
+    if (isEmailLookup) {
+      member = await members.findOne({ email: rawIdentifier.toLowerCase() });
+    } else {
+      const bareUsername = rawIdentifier.replace(/^@+/, "");
+      const escapedUsername = escapeRegex(bareUsername);
+      member = await members.findOne({
+        handle: { $regex: `^@?${escapedUsername}$`, $options: "i" },
+      });
+    }
+
+    if (!member || !verifyPassword(cleanPassword, member.passwordHash)) {
+      return res.status(401).json({ error: "Invalid email/username or password." });
+    }
+
     // Collect and stack all badges saved on the member (plus backfill OG if joined by Dec 1st)
     const badgeSet = new Set();
     if (Array.isArray(member.badges)) {
       member.badges.forEach((b) => {
-        if (b) badgeSet.add(String(b).toLowerCase());
+        if (b) badgeSet.add(String(b).trim().toLowerCase());
       });
     }
     if (member.role) {
-      badgeSet.add(String(member.role).toLowerCase());
+      badgeSet.add(String(member.role).trim().toLowerCase());
     }
+
+    const normalizedId = String(member.memberId || "").trim().toUpperCase();
+    const lowerHandle = String(member.handle || "").trim().toLowerCase();
+    if (
+      normalizedId === "#RV-0001" ||
+      lowerHandle === "@raveyn" ||
+      lowerHandle === "@itsraveyn"
+    ) {
+      badgeSet.add("artist");
+    }
+
     const createdDate = member.createdAt ? new Date(member.createdAt) : null;
-    if (createdDate && createdDate <= OG_PROMO_CUTOFF) {
+    if (!createdDate || Number.isNaN(createdDate.getTime()) || createdDate <= OG_PROMO_CUTOFF) {
       badgeSet.add("og");
     }
     if (badgeSet.size > 1 && badgeSet.has("member")) {
@@ -96,7 +127,30 @@ export default async function handler(req, res) {
       badgeSet.add("member");
     }
 
-    const resolvedBadges = [...badgeSet];
+    const resolvedBadges = [...badgeSet].sort((a, b) => {
+      const idxA = BADGE_PRIORITY.indexOf(a);
+      const idxB = BADGE_PRIORITY.indexOf(b);
+      return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+    });
+
+    // Automatically upgrade old user documents in MongoDB so their badges persist
+    const needsMigration =
+      !Array.isArray(member.badges) ||
+      member.badges.length !== resolvedBadges.length ||
+      resolvedBadges.some((b, i) => member.badges[i] !== b) ||
+      member.role !== resolvedBadges[0];
+
+    if (needsMigration) {
+      await members.updateOne(
+        { _id: member._id },
+        {
+          $set: {
+            badges: resolvedBadges,
+            role: resolvedBadges[0],
+          },
+        }
+      );
+    }
 
     // Return safe member data (never return passwordHash)
     return res.status(200).json({
