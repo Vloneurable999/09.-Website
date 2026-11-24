@@ -34,6 +34,22 @@ async function bootApp() {
   } catch (error) {
     console.error("Failed to load signup.js:", error);
   }
+
+  // 4. Load Club Chat module independently
+  try {
+    const { initChat } = await import("./chat.js");
+    initChat();
+  } catch (error) {
+    console.error("Failed to load chat.js:", error);
+  }
+
+  // 5. Load Members-Only Vault module independently
+  try {
+    const { initVault } = await import("./vault.js");
+    initVault();
+  } catch (error) {
+    console.error("Failed to load vault.js:", error);
+  }
 }
 
 if (document.readyState === "loading") {

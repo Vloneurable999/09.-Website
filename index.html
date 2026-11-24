@@ -68,6 +68,7 @@
       <div class="hidden sm:flex items-center gap-1 text-xs font-medium text-zinc-400">
         <a href="#socials" data-hub-link class="px-3 py-2 rounded-xl hover:text-white hover:bg-white/5 transition-colors">Socials</a>
         <a href="#uploads" data-hub-link class="px-3 py-2 rounded-xl hover:text-white hover:bg-white/5 transition-colors">Uploads</a>
+        <a href="#vault" data-hub-link class="px-3 py-2 rounded-xl hover:text-white hover:bg-white/5 transition-colors">Vault</a>
         <a href="#chat" data-hub-link class="px-3 py-2 rounded-xl hover:text-white hover:bg-white/5 transition-colors">Chat</a>
       </div>
 
@@ -269,6 +270,182 @@
 
       <!-- Dynamically populated from ARTIST_CONFIG.socials -->
       <div id="socialsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5"></div>
+    </section>
+
+    <!-- 3.5. MEMBERS-ONLY CLUB VAULT (DEMOS, SNIPPETS & TEASERS) -->
+    <section id="vault" class="scroll-mt-24 space-y-4">
+      <div class="flex items-center justify-between px-1">
+        <h2 class="font-mono text-xs uppercase tracking-[0.22em] text-fuchsia-300/80 flex items-center gap-2">
+          <span class="text-purple-400">✦</span> Club Vault
+        </h2>
+        <div class="flex items-center gap-2">
+          <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono text-purple-200 bg-purple-500/15 border border-purple-400/30">
+            MEMBERS ONLY
+          </span>
+          <button
+            id="vaultRefreshBtn"
+            type="button"
+            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-mono text-zinc-300 bg-white/[0.04] border border-white/10 hover:text-white hover:border-fuchsia-400/40 transition-colors cursor-pointer"
+            aria-label="Refresh club vault"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- Locked State (Shown when signed out) -->
+      <div
+        id="vaultLockedCard"
+        class="relative overflow-hidden rounded-3xl bg-white/[0.03] backdrop-blur-xl border border-white/10 p-6 sm:p-8 text-center shadow-2xl shadow-black/50"
+      >
+        <div aria-hidden="true" class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-purple-400/60 to-transparent"></div>
+        <div class="mx-auto mb-3 w-12 h-12 rounded-2xl bg-purple-500/15 border border-purple-400/30 flex items-center justify-center text-purple-300">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </div>
+        <h3 class="text-base sm:text-lg font-bold text-white">Unreleased Demos, Snippets &amp; Teasers</h3>
+        <p class="mt-1.5 text-xs sm:text-sm text-zinc-400 max-w-md mx-auto">
+          Sign in with your <span class="text-fuchsia-200 font-medium">raveyn's club</span> pass to watch exclusive studio videos and drop emoji reactions.
+        </p>
+        <div class="mt-5 flex items-center justify-center gap-2.5">
+          <a
+            id="vaultLoginBtn"
+            href="#login"
+            class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-medium text-zinc-200 bg-white/[0.04] border border-white/10 hover:text-white hover:border-fuchsia-400/40 transition-all cursor-pointer"
+          >
+            Log In
+          </a>
+          <a
+            id="vaultSignupBtn"
+            href="#signup"
+            class="inline-flex items-center px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 shadow-neon-purple transition-all cursor-pointer"
+          >
+            Join Club ✦
+          </a>
+        </div>
+      </div>
+
+      <!-- Unlocked Members-Only Vault View -->
+      <div id="vaultUnlockedView" class="hidden space-y-4">
+        <!-- PRIVATE ARTIST-ONLY STUDIO UPLOAD PANEL (Hidden for all non-artist members) -->
+        <div
+          id="artistStudioPanel"
+          class="hidden relative overflow-hidden rounded-3xl p-[1px] bg-gradient-to-br from-purple-500/60 via-fuchsia-400/50 to-pink-500/60 shadow-neon-purple"
+        >
+          <div class="rounded-[23px] bg-[#0c0716]/95 backdrop-blur-xl p-5 sm:p-6 space-y-4">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-mono uppercase tracking-wider border bg-pink-500/20 text-pink-200 border-pink-400/40">
+                  ARTIST ONLY ✦
+                </span>
+                <h3 class="text-sm sm:text-base font-bold text-white">Studio Vault Uploader</h3>
+              </div>
+              <span class="font-mono text-[10px] text-zinc-400">Visible only to you</span>
+            </div>
+
+            <div id="vaultUploadError" class="hidden px-4 py-2.5 rounded-2xl bg-rose-500/10 border border-rose-400/30 text-xs text-rose-200" role="alert"></div>
+
+            <form id="vaultUploadForm" class="space-y-3.5" novalidate>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="sm:col-span-2">
+                  <label for="vaultTitleInput" class="block font-mono text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
+                    Title
+                  </label>
+                  <input
+                    id="vaultTitleInput"
+                    type="text"
+                    maxlength="100"
+                    required
+                    placeholder="e.g. midnight demo v2"
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950/80 border border-white/10 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-fuchsia-400/60 transition-all"
+                  />
+                </div>
+                <div>
+                  <label for="vaultCategoryInput" class="block font-mono text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
+                    Type
+                  </label>
+                  <select
+                    id="vaultCategoryInput"
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950/90 border border-white/10 text-sm text-white focus:outline-none focus:border-fuchsia-400/60 transition-all"
+                  >
+                    <option value="demo">Demo</option>
+                    <option value="snippet">Snippet</option>
+                    <option value="teaser">Teaser</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label for="vaultCaptionInput" class="block font-mono text-[10px] uppercase tracking-wider text-zinc-400 mb-1">
+                  Notes / Caption (optional)
+                </label>
+                <input
+                  id="vaultCaptionInput"
+                  type="text"
+                  maxlength="280"
+                  placeholder="Quick note for the club..."
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-zinc-950/80 border border-white/10 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-fuchsia-400/60 transition-all"
+                />
+              </div>
+
+              <div>
+                <label
+                  for="vaultFileInput"
+                  class="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-3 rounded-2xl bg-zinc-950/70 border border-dashed border-fuchsia-400/35 hover:border-fuchsia-400/70 transition-colors cursor-pointer"
+                >
+                  <div class="flex items-center gap-2.5 text-left">
+                    <span class="px-2.5 py-1 rounded-lg text-xs font-semibold text-fuchsia-200 bg-fuchsia-500/15 border border-fuchsia-400/30">
+                      Choose Video
+                    </span>
+                    <span id="vaultSelectedFileName" class="text-xs font-mono text-zinc-400 truncate max-w-[220px] sm:max-w-xs">
+                      MP4, WebM, or MOV · up to 50 MB
+                    </span>
+                  </div>
+                  <input id="vaultFileInput" type="file" accept="video/mp4,video/webm,video/quicktime,video/*" class="hidden" />
+                </label>
+              </div>
+
+              <!-- Upload Progress Bar -->
+              <div id="vaultUploadProgressWrap" class="hidden space-y-1.5">
+                <div class="flex items-center justify-between text-[11px] font-mono text-fuchsia-200">
+                  <span id="vaultUploadProgressText">Uploading...</span>
+                </div>
+                <div class="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                  <div id="vaultUploadProgressBar" class="h-full rounded-full bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 transition-all duration-300" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <button
+                id="vaultUploadBtn"
+                type="submit"
+                class="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-gradient-to-r from-purple-600 via-fuchsia-600 to-pink-600 hover:from-purple-500 hover:via-fuchsia-500 hover:to-pink-500 shadow-neon-pink active:scale-95 transition-all cursor-pointer"
+              >
+                Upload to Vault ✦
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Inline Error Box -->
+        <div id="vaultError" class="hidden px-4 py-2.5 rounded-2xl bg-rose-500/10 border border-rose-400/30 text-xs text-rose-200" role="alert"></div>
+
+        <!-- Category Filter Pills -->
+        <div class="flex items-center gap-2 flex-wrap px-1">
+          <button type="button" data-vault-filter="all" class="px-3 py-1.5 rounded-xl text-xs font-mono border bg-fuchsia-500/25 text-white border-fuchsia-400/50 transition-all cursor-pointer">All</button>
+          <button type="button" data-vault-filter="demo" class="px-3 py-1.5 rounded-xl text-xs font-mono border bg-white/[0.03] text-zinc-400 border-white/10 hover:text-white transition-all cursor-pointer">Demos</button>
+          <button type="button" data-vault-filter="snippet" class="px-3 py-1.5 rounded-xl text-xs font-mono border bg-white/[0.03] text-zinc-400 border-white/10 hover:text-white transition-all cursor-pointer">Snippets</button>
+          <button type="button" data-vault-filter="teaser" class="px-3 py-1.5 rounded-xl text-xs font-mono border bg-white/[0.03] text-zinc-400 border-white/10 hover:text-white transition-all cursor-pointer">Teasers</button>
+        </div>
+
+        <!-- Video Cards Grid -->
+        <div id="vaultGrid" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="col-span-full py-10 text-center text-xs font-mono text-zinc-500">
+            Loading Club Vault...
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- 4. CLUB CHAT SECTION -->
@@ -656,5 +833,6 @@
   <!-- Modular Application Entry Point -->
   <script type="module" src="./js/main.js"></script>
   <script type="module" src="./js/chat.js"></script>
+  <script type="module" src="./js/vault.js"></script>
 </body>
 </html>

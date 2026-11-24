@@ -511,6 +511,16 @@ export function initSignup() {
     showView("signup");
   });
 
+  document.getElementById("vaultLoginBtn")?.addEventListener("click", () => {
+    window.location.hash = "#login";
+    showView("login");
+  });
+
+  document.getElementById("vaultSignupBtn")?.addEventListener("click", () => {
+    window.location.hash = "#signup";
+    showView("signup");
+  });
+
   const goHome = (e) => {
     if (e) e.preventDefault();
     if (window.location.hash === "#signup" || window.location.hash === "#login") {

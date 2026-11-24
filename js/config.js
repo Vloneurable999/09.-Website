@@ -14,6 +14,7 @@ export const SHARE_URL = "https://www.raveyns.com";
 export const SIGNUP_API_URL = "/api/signup";
 export const LOGIN_API_URL = "/api/login";
 export const CHAT_API_URL = "/api/chat";
+export const VAULT_API_URL = "/api/vault";
 
 /**
  * MEMBER ID ROLES & BADGE STYLES
