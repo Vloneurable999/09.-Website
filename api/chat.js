@@ -136,6 +136,14 @@ async function migrateLegacyData(db) {
   globalThis._raveynsBadgesMigrated = true;
 }
 
+/**
+ * Reuse the MongoDB connection across warm Vercel serverless invocations.
+ */
+async function getDatabase() {
+  if (!MONGODB_URI) {
+    throw new Error("MONGODB_URI environment variable is not set in Vercel.");
+  }
+
   if (!globalThis._mongoClientPromise) {
     const client = new MongoClient(MONGODB_URI);
     globalThis._mongoClientPromise = client.connect().catch((err) => {
@@ -151,7 +159,11 @@ async function migrateLegacyData(db) {
 export default async function handler(req, res) {
   try {
     const db = await getDatabase();
-    await migrateLegacyData(db);
+    try {
+      await migrateLegacyData(db);
+    } catch (migrationError) {
+      console.error("Legacy badge migration skipped:", migrationError);
+    }
     const chatCollection = db.collection("chat_messages");
 
     // ------------------------------------------------------------------------
