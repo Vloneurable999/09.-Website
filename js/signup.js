@@ -340,10 +340,22 @@ export function initSignup() {
   // Header & navigation buttons
   document.getElementById("navSignupBtn")?.addEventListener("click", () => {
     window.location.hash = "#signup";
+    showView("signup");
   });
 
   document.getElementById("navLoginBtn")?.addEventListener("click", () => {
     window.location.hash = "#login";
+    showView("login");
+  });
+
+  document.getElementById("chatLoginBtn")?.addEventListener("click", () => {
+    window.location.hash = "#login";
+    showView("login");
+  });
+
+  document.getElementById("chatSignupBtn")?.addEventListener("click", () => {
+    window.location.hash = "#signup";
+    showView("signup");
   });
 
   const goHome = (e) => {
