@@ -5,9 +5,10 @@
  * Syncs live with member login/signup state via localStorage & custom events.
  * ============================================================================
  */
-import { CHAT_API_URL } from "./config.js";
+import * as config from "./config.js";
 import { showToast } from "./ui.js";
 
+const CHAT_API_URL = config.CHAT_API_URL || "/api/chat";
 const STORAGE_KEY = "raveyns_club_member";
 const POLL_INTERVAL_MS = 4500;
 const ARTIST_HANDLES = new Set(["@raveyn", "@itsraveyn"]);
@@ -220,7 +221,15 @@ async function fetchMessages({ silent = false, forceScroll = false } = {}) {
     renderMessages(Array.isArray(data.messages) ? data.messages : [], forceScroll);
   } catch (error) {
     if (!silent) {
-      setChatError(error.message || "Could not connect to club chat.");
+      const msg = error.message || "Could not connect to club chat.";
+      setChatError(msg);
+      if (!lastRenderedKey) {
+        container.innerHTML = `
+          <div class="h-full flex flex-col items-center justify-center text-center py-10 px-4">
+            <p class="text-xs font-mono text-rose-300">Unable to load club chat.</p>
+          </div>
+        `;
+      }
     }
   }
 }
