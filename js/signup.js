@@ -12,6 +12,73 @@ import { showToast } from "./ui.js";
 const STORAGE_KEY = "raveyns_club_member";
 const OG_PROMO_CUTOFF = new Date("2026-12-01T23:59:59-06:00");
 let currentMember = null;
+let totalRegisteredMembers = null;
+
+/**
+ * Computes a member's join position and what percent of all registered users
+ * they joined after (e.g., #RV-0001 -> 0%, #RV-0004 of 10 -> 30%).
+ */
+function computeJoinStats(memberId, totalUsers) {
+  const numericTotal = Number(totalUsers);
+  if (!Number.isFinite(numericTotal) || numericTotal <= 0) return null;
+
+  const match = String(memberId || "").trim().match(/^#RV-(\d+)$/i);
+  const rawRank = match ? parseInt(match[1], 10) : numericTotal;
+  const safeTotal = Math.max(numericTotal, rawRank);
+  const safeRank = Math.min(Math.max(rawRank, 1), safeTotal);
+  const joinedAfterPercent = Math.round(((safeRank - 1) / safeTotal) * 100);
+
+  return {
+    rank: safeRank,
+    total: safeTotal,
+    joinedAfterPercent,
+  };
+}
+
+/**
+ * Updates the total registered members counter and the logged-in user's
+ * join percentile on both the homepage and the Digital Member Pass.
+ */
+function updateClubStatsUI() {
+  const totalCountEl = document.getElementById("clubTotalMembersCount");
+  const percentileRow = document.getElementById("clubUserPercentileRow");
+  const joinedAfterText = document.getElementById("clubUserJoinedAfterText");
+  const percentileBar = document.getElementById("clubUserPercentileBar");
+  const passTotalEl = document.getElementById("memberPassTotalUsers");
+  const passJoinedAfterEl = document.getElementById("memberPassJoinedAfter");
+
+  const hasTotal = Number.isFinite(totalRegisteredMembers) && totalRegisteredMembers > 0;
+  const formattedTotal = hasTotal ? totalRegisteredMembers.toLocaleString() : "—";
+
+  if (totalCountEl) {
+    totalCountEl.textContent = hasTotal ? `${formattedTotal} registered` : "—";
+  }
+  if (passTotalEl) {
+    passTotalEl.textContent = formattedTotal;
+  }
+
+  if (currentMember && hasTotal) {
+    const stats = computeJoinStats(currentMember.memberId, totalRegisteredMembers);
+    if (stats) {
+      percentileRow?.classList.remove("hidden");
+      if (joinedAfterText) {
+        joinedAfterText.textContent = `${stats.joinedAfterPercent}% of users (#${stats.rank} of ${stats.total})`;
+      }
+      if (percentileBar) {
+        percentileBar.style.width = `${stats.joinedAfterPercent}%`;
+      }
+      if (passJoinedAfterEl) {
+        passJoinedAfterEl.textContent = `${stats.joinedAfterPercent}% of users`;
+      }
+      return;
+    }
+  }
+
+  percentileRow?.classList.add("hidden");
+  if (passJoinedAfterEl) {
+    passJoinedAfterEl.textContent = "—";
+  }
+}
 
 /**
  * Loads the saved member pass from localStorage if valid, and automatically
@@ -201,6 +268,8 @@ function updateMemberUI() {
   window.dispatchEvent(
     new CustomEvent("raveyns:auth-changed", { detail: { member: currentMember } })
   );
+
+  updateClubStatsUI();
 }
 
 /**
@@ -285,6 +354,10 @@ async function handleSignupSubmit(event) {
     }
 
     currentMember = data.member;
+    if (typeof data.totalMembers === "number") {
+      totalRegisteredMembers = data.totalMembers;
+      window.__raveynsTotalMembers = data.totalMembers;
+    }
     saveMember(currentMember);
 
     document.getElementById("signupForm")?.reset();
@@ -354,6 +427,10 @@ async function handleLoginSubmit(event) {
     }
 
     currentMember = data.member;
+    if (typeof data.totalMembers === "number") {
+      totalRegisteredMembers = data.totalMembers;
+      window.__raveynsTotalMembers = data.totalMembers;
+    }
     saveMember(currentMember);
 
     document.getElementById("loginForm")?.reset();
@@ -389,7 +466,19 @@ function bindPasswordToggle(inputId, btnId) {
  */
 export function initSignup() {
   currentMember = loadSavedMember();
+  if (typeof window.__raveynsTotalMembers === "number") {
+    totalRegisteredMembers = window.__raveynsTotalMembers;
+  }
   updateMemberUI();
+
+  // Keep total registered count & join percentile in sync when Club Chat loads/polls
+  window.addEventListener("raveyns:stats-updated", (event) => {
+    const count = event.detail?.totalMembers;
+    if (typeof count === "number") {
+      totalRegisteredMembers = count;
+      updateClubStatsUI();
+    }
+  });
 
   // Header & navigation buttons
   document.getElementById("navSignupBtn")?.addEventListener("click", () => {

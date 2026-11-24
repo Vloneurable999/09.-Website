@@ -152,8 +152,11 @@ export default async function handler(req, res) {
       );
     }
 
+    const totalMembers = await members.countDocuments();
+
     // Return safe member data (never return passwordHash)
     return res.status(200).json({
+      totalMembers,
       member: {
         memberId: member.memberId,
         role: resolvedBadges[0],

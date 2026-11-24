@@ -127,6 +127,7 @@ export default async function handler(req, res) {
 
     // Return safe member data (never return passwordHash)
     return res.status(201).json({
+      totalMembers: passNumber,
       member: {
         memberId: newMember.memberId,
         role: newMember.role,

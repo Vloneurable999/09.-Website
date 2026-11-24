@@ -212,8 +212,10 @@ export default async function handler(req, res) {
         };
       });
 
+      const totalMembers = await db.collection("members").countDocuments();
+
       res.setHeader("Cache-Control", "no-store");
-      return res.status(200).json({ messages });
+      return res.status(200).json({ messages, totalMembers });
     }
 
     // ------------------------------------------------------------------------

@@ -242,6 +242,14 @@ async function fetchMessages({ silent = false, forceScroll = false } = {}) {
     }
 
     setChatError("");
+    if (typeof data.totalMembers === "number") {
+      window.__raveynsTotalMembers = data.totalMembers;
+      window.dispatchEvent(
+        new CustomEvent("raveyns:stats-updated", {
+          detail: { totalMembers: data.totalMembers },
+        })
+      );
+    }
     renderMessages(Array.isArray(data.messages) ? data.messages : [], forceScroll);
   } catch (error) {
     if (!silent) {
