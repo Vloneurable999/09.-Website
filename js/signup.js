@@ -15,8 +15,8 @@ let currentMember = null;
 let totalRegisteredMembers = null;
 
 /**
- * Computes a member's join position and what percent of all registered users
- * they joined after (e.g., #RV-0001 -> 0%, #RV-0004 of 10 -> 30%).
+ * Computes a member's join position and what percent of all other registered
+ * users they joined after (e.g., #1 of 4 -> 0%, #4 of 4 -> 100%).
  */
 function computeJoinStats(memberId, totalUsers) {
   const numericTotal = Number(totalUsers);
@@ -26,7 +26,8 @@ function computeJoinStats(memberId, totalUsers) {
   const rawRank = match ? parseInt(match[1], 10) : numericTotal;
   const safeTotal = Math.max(numericTotal, rawRank);
   const safeRank = Math.min(Math.max(rawRank, 1), safeTotal);
-  const joinedAfterPercent = Math.round(((safeRank - 1) / safeTotal) * 100);
+  const joinedAfterPercent =
+    safeTotal <= 1 ? 0 : Math.round(((safeRank - 1) / (safeTotal - 1)) * 100);
 
   return {
     rank: safeRank,
@@ -86,6 +87,15 @@ function updateClubStatsUI() {
  */
 function loadSavedMember() {
   try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !parsed.handle || (!parsed.memberId && !parsed.email)) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+
     // Upgrade old browser sessions that don't have a badges array yet or still carry optInDrops
     let sessionModified = false;
     if ("optInDrops" in parsed) {
