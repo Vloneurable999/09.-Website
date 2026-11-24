@@ -134,22 +134,26 @@ export default async function handler(req, res) {
     });
 
     // Automatically upgrade old user documents in MongoDB so their badges persist
-    const needsMigration =
+    // and remove the deprecated optInDrops field if present
+    const needsBadgeMigration =
       !Array.isArray(member.badges) ||
       member.badges.length !== resolvedBadges.length ||
       resolvedBadges.some((b, i) => member.badges[i] !== b) ||
       member.role !== resolvedBadges[0];
+    const hasDeprecatedDrops = Object.prototype.hasOwnProperty.call(member, "optInDrops");
 
-    if (needsMigration) {
-      await members.updateOne(
-        { _id: member._id },
-        {
-          $set: {
-            badges: resolvedBadges,
-            role: resolvedBadges[0],
-          },
-        }
-      );
+    if (needsBadgeMigration || hasDeprecatedDrops) {
+      const updateDoc = {};
+      if (needsBadgeMigration) {
+        updateDoc.$set = {
+          badges: resolvedBadges,
+          role: resolvedBadges[0],
+        };
+      }
+      if (hasDeprecatedDrops) {
+        updateDoc.$unset = { optInDrops: "" };
+      }
+      await members.updateOne({ _id: member._id }, updateDoc);
     }
 
     const totalMembers = await members.countDocuments();
@@ -163,7 +167,6 @@ export default async function handler(req, res) {
         badges: resolvedBadges,
         handle: member.handle,
         email: member.email,
-        optInDrops: Boolean(member.optInDrops),
       },
     });
   } catch (error) {

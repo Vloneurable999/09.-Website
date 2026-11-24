@@ -65,9 +65,16 @@ function resolveMemberBadges(member) {
  * the stacked badges array. Runs once per warm serverless instance.
  */
 async function migrateLegacyData(db) {
-  if (globalThis._raveynsBadgesMigrated) return;
+  if (globalThis._raveynsMemberDataMigratedV2) return;
 
   const membersCol = db.collection("members");
+
+  // Remove deprecated optInDrops field from all existing MongoDB member documents
+  await membersCol.updateMany(
+    { optInDrops: { $exists: true } },
+    { $unset: { optInDrops: "" } }
+  );
+
   const legacyMembers = await membersCol
     .find({
       $or: [
@@ -133,7 +140,7 @@ async function migrateLegacyData(db) {
     await chatCol.bulkWrite(msgBulkOps);
   }
 
-  globalThis._raveynsBadgesMigrated = true;
+  globalThis._raveynsMemberDataMigratedV2 = true;
 }
 
 /**

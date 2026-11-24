@@ -54,7 +54,7 @@ export default async function handler(req, res) {
   try {
     const body =
       typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
-    const { handle, email, password, optInDrops } = body;
+    const { handle, email, password } = body;
 
     const cleanHandle = String(handle || "").trim();
     const cleanEmail = String(email || "").trim().toLowerCase();
@@ -119,7 +119,6 @@ export default async function handler(req, res) {
       handle: formattedHandle,
       email: cleanEmail,
       passwordHash: hashPassword(cleanPassword),
-      optInDrops: Boolean(optInDrops),
       createdAt: now,
     };
 
@@ -134,7 +133,6 @@ export default async function handler(req, res) {
         badges: newMember.badges,
         handle: newMember.handle,
         email: newMember.email,
-        optInDrops: newMember.optInDrops,
       },
     });
   } catch (error) {

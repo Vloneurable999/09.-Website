@@ -86,15 +86,12 @@ function updateClubStatsUI() {
  */
 function loadSavedMember() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || !parsed.handle || !parsed.email) {
-      localStorage.removeItem(STORAGE_KEY);
-      return null;
+    // Upgrade old browser sessions that don't have a badges array yet or still carry optInDrops
+    let sessionModified = false;
+    if ("optInDrops" in parsed) {
+      delete parsed.optInDrops;
+      sessionModified = true;
     }
-
-    // Upgrade old browser sessions that don't have a badges array yet
     if (!Array.isArray(parsed.badges) || parsed.badges.length === 0) {
       const seedBadges = new Date() <= OG_PROMO_CUTOFF ? ["og"] : [];
       const resolved = getMemberBadges(
@@ -105,6 +102,9 @@ function loadSavedMember() {
       );
       parsed.badges = resolved.map((b) => b.key);
       parsed.role = parsed.badges[0] || "member";
+      sessionModified = true;
+    }
+    if (sessionModified) {
       saveMember(parsed);
     }
 
@@ -228,7 +228,6 @@ function updateMemberUI() {
     const badgesEl = document.getElementById("memberPassBadges");
     const handleEl = document.getElementById("memberPassHandle");
     const emailEl = document.getElementById("memberPassEmail");
-    const alertsEl = document.getElementById("memberPassAlerts");
 
     if (idEl) idEl.textContent = currentMember.memberId || "#RV-0001";
     if (badgesEl) {
@@ -248,9 +247,6 @@ function updateMemberUI() {
     }
     if (handleEl) handleEl.textContent = currentMember.handle;
     if (emailEl) emailEl.textContent = currentMember.email;
-    if (alertsEl) {
-      alertsEl.textContent = currentMember.optInDrops ? "Drops: Enabled" : "Drops: Paused";
-    }
   } else {
     navLoginBtn?.classList.remove("hidden");
     if (navSignupLabel) navSignupLabel.textContent = "Join Club";
@@ -304,7 +300,6 @@ async function handleSignupSubmit(event) {
   const handle = document.getElementById("signupHandle")?.value.trim() || "";
   const email = document.getElementById("signupEmail")?.value.trim() || "";
   const password = document.getElementById("signupPassword")?.value || "";
-  const optInDrops = Boolean(document.getElementById("signupOptIn")?.checked);
   const submitBtn = document.getElementById("signupSubmitBtn");
 
   if (!handle) {
@@ -330,7 +325,7 @@ async function handleSignupSubmit(event) {
     const response = await fetch(SIGNUP_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handle, email, password, optInDrops }),
+      body: JSON.stringify({ handle, email, password }),
     });
 
     const rawText = await response.text();
