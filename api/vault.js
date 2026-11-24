@@ -1,21 +1,22 @@
 /**
  * ============================================================================
  * api/vault.js — VERCEL SERVERLESS FUNCTION (MONGODB ATLAS)
- * Members-only Club Vault for demos, snippets, and teasers.
- * - Artist/Admin only: chunked video uploads & deleting items
- * - Signed-in members only: listing vault items, HTTP Range video streaming,
- *   and toggling emoji reactions
+ * Members-Only Club Archive & Artist Studio Video Uploader
+ * - GET /api/vault?memberId=...&email=...               -> List ready archive videos
+ * - GET /api/vault?stream=<id>&memberId=...&email=...   -> Stream video (HTTP Range 206)
+ * - POST /api/vault { action: "react" }                 -> Toggle emoji reaction (members)
+ * - POST /api/vault { action: "init" | "chunk" | "complete" | "delete" } -> Artist only
  * ============================================================================
  */
-import { MongoClient, ObjectId } from "mongodb";
+import { MongoClient, ObjectId, Binary } from "mongodb";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || "raveyns_club";
 
 const ALLOWED_CATEGORIES = new Set(["demo", "snippet", "teaser"]);
 const ALLOWED_EMOJIS = new Set(["🔥", "💜", "🤯", "😭", "✨", "🔁"]);
-const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB max per video
-const MAX_RANGE_BYTES = 2 * 1024 * 1024; // 2 MB per range response (stays under Vercel 4.5 MB limit)
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB max video size
+const MAX_RANGE_CHUNK_BYTES = 2 * 1024 * 1024; // 2 MB max per 206 stream response (Vercel safe)
 
 /**
  * Reuse the MongoDB connection across warm Vercel serverless invocations.
@@ -38,25 +39,26 @@ async function getDatabase() {
 }
 
 /**
- * Looks up a member in MongoDB using memberId and/or email.
+ * Looks up a verified club member by memberId or email.
  */
-async function findVerifiedMember(db, memberId, email) {
-  const cleanId = String(memberId || "").trim();
+async function findMember(db, memberId, email) {
+  const cleanMemberId = String(memberId || "").trim();
   const cleanEmail = String(email || "").trim().toLowerCase();
-  if (!cleanId && !cleanEmail) return null;
 
   const clauses = [];
-  if (cleanId) clauses.push({ memberId: cleanId });
+  if (cleanMemberId) clauses.push({ memberId: cleanMemberId });
   if (cleanEmail) clauses.push({ email: cleanEmail });
+  if (clauses.length === 0) return null;
 
   return db.collection("members").findOne({ $or: clauses });
 }
 
 /**
- * Checks whether a verified member has artist/admin upload privileges.
+ * Checks whether a member has Artist or Admin privileges to upload/delete archive videos.
  */
 function isArtistMember(member) {
   if (!member) return false;
+
   const normalizedId = String(member.memberId || "").trim().toUpperCase();
   const lowerHandle = String(member.handle || "").trim().toLowerCase();
   const lowerRole = String(member.role || "").trim().toLowerCase();
@@ -76,40 +78,41 @@ function isArtistMember(member) {
 }
 
 /**
- * Normalizes a MongoDB Binary or Buffer chunk into a Node.js Buffer.
+ * Formats a MongoDB archive document into a safe frontend payload with reaction counts.
  */
-function toNodeBuffer(data) {
-  if (Buffer.isBuffer(data)) return data;
-  if (data && data.buffer) return Buffer.from(data.buffer);
-  return Buffer.from(data || []);
-}
-
-/**
- * Formats a vault item document for safe JSON responses.
- */
-function serializeVaultItem(doc, viewerMemberId) {
+function formatVaultItem(doc, viewerMemberId) {
   const rawReactions = doc.reactions && typeof doc.reactions === "object" ? doc.reactions : {};
   const reactions = {};
 
   for (const emoji of ALLOWED_EMOJIS) {
-    const list = Array.isArray(rawReactions[emoji]) ? rawReactions[emoji] : [];
+    const voters = Array.isArray(rawReactions[emoji]) ? rawReactions[emoji] : [];
     reactions[emoji] = {
-      count: list.length,
-      reacted: Boolean(viewerMemberId && list.includes(viewerMemberId)),
+      count: voters.length,
+      reacted: Boolean(viewerMemberId && voters.includes(viewerMemberId)),
     };
   }
 
   return {
     id: doc._id.toString(),
-    title: doc.title,
-    category: doc.category || "demo",
+    title: doc.title || "Untitled",
+    category: ALLOWED_CATEGORIES.has(doc.category) ? doc.category : "demo",
     caption: doc.caption || "",
     mimeType: doc.mimeType || "video/mp4",
     fileSize: doc.fileSize || 0,
-    uploadedBy: doc.uploadedBy || { memberId: "#RV-0001", handle: "@raveyn" },
+    uploadedBy: doc.uploadedBy || "@raveyn",
+    createdAt: doc.createdAt || new Date(),
     reactions,
-    createdAt: doc.createdAt,
   };
+}
+
+/**
+ * Converts a MongoDB Binary or Buffer chunk into a Node.js Buffer.
+ */
+function toNodeBuffer(data) {
+  if (!data) return Buffer.alloc(0);
+  if (Buffer.isBuffer(data)) return data;
+  if (data.buffer) return Buffer.from(data.buffer);
+  return Buffer.from(data);
 }
 
 export default async function handler(req, res) {
@@ -119,116 +122,121 @@ export default async function handler(req, res) {
     const vaultChunks = db.collection("vault_chunks");
 
     // ------------------------------------------------------------------------
-    // GET /api/vault — Stream a video (?stream=ID) OR list all vault items
+    // GET /api/vault — Stream a video OR list all ready Club Archive items
     // ------------------------------------------------------------------------
     if (req.method === "GET") {
-      const { stream, memberId, email } = req.query || {};
-      const member = await findVerifiedMember(db, memberId, email);
+      const { memberId, email, stream } = req.query || {};
+      const member = await findMember(db, memberId, email);
 
       if (!member) {
         return res.status(401).json({
-          error: "Members only. Please sign in to access the Club Vault.",
+          error: "Members only. Please sign in to access the Club Archive.",
         });
       }
 
-      // Stream video bytes with HTTP Range (206 Partial Content) support
+      // 1. STREAM VIDEO BY ID (Supports HTTP Range 206 for smooth seeking)
       if (stream) {
         if (!ObjectId.isValid(stream)) {
-          return res.status(400).json({ error: "Invalid video ID." });
+          return res.status(400).json({ error: "Invalid archive video ID." });
         }
 
         const vaultObjectId = new ObjectId(stream);
         const item = await vaultItems.findOne({ _id: vaultObjectId, status: "ready" });
         if (!item) {
-          return res.status(404).json({ error: "Video not found." });
+          return res.status(404).json({ error: "Archive video not found." });
         }
 
-        const totalSize = Number(item.fileSize || 0);
-        const chunkSize = Number(item.chunkSize || 1536 * 1024);
+        const totalSize = Number(item.fileSize) || 0;
+        const chunkSize = Number(item.chunkSize) || 1536 * 1024;
+        const mimeType = item.mimeType || "video/mp4";
+
+        if (totalSize <= 0) {
+          return res.status(404).json({ error: "Video data is empty." });
+        }
+
         const rangeHeader = req.headers.range;
-
         let start = 0;
-        let end = Math.min(totalSize - 1, MAX_RANGE_BYTES - 1);
+        let end = Math.min(totalSize - 1, MAX_RANGE_CHUNK_BYTES - 1);
+        let isPartial = false;
 
-        if (rangeHeader && rangeHeader.startsWith("bytes=")) {
-          const [rawStart, rawEnd] = rangeHeader.replace("bytes=", "").split("-");
-          start = parseInt(rawStart, 10);
-          if (Number.isNaN(start) || start < 0) start = 0;
-
-          if (rawEnd) {
-            end = parseInt(rawEnd, 10);
-          } else {
-            end = start + MAX_RANGE_BYTES - 1;
+        if (rangeHeader) {
+          const match = String(rangeHeader).match(/bytes=(\d*)-(\d*)/);
+          if (match) {
+            isPartial = true;
+            start = match[1] ? parseInt(match[1], 10) : 0;
+            const requestedEnd = match[2] ? parseInt(match[2], 10) : totalSize - 1;
+            end = Math.min(requestedEnd, totalSize - 1, start + MAX_RANGE_CHUNK_BYTES - 1);
           }
-
-          if (Number.isNaN(end) || end >= totalSize) {
-            end = totalSize - 1;
-          }
-          // Cap each response slice to stay safely below Vercel's 4.5 MB limit
-          if (end - start + 1 > MAX_RANGE_BYTES) {
-            end = start + MAX_RANGE_BYTES - 1;
-          }
+        } else if (totalSize <= MAX_RANGE_CHUNK_BYTES) {
+          end = totalSize - 1;
+        } else {
+          // Cap un-ranged requests to stay under Vercel's response payload limit
+          isPartial = true;
         }
 
-        if (start >= totalSize || start > end) {
+        if (start >= totalSize || start > end || start < 0) {
           res.setHeader("Content-Range", `bytes */${totalSize}`);
           return res.status(416).end();
         }
 
-        const firstChunkIndex = Math.floor(start / chunkSize);
-        const lastChunkIndex = Math.floor(end / chunkSize);
+        const startChunk = Math.floor(start / chunkSize);
+        const endChunk = Math.floor(end / chunkSize);
 
         const chunks = await vaultChunks
           .find({
             vaultId: vaultObjectId,
-            index: { $gte: firstChunkIndex, $lte: lastChunkIndex },
+            index: { $gte: startChunk, $lte: endChunk },
           })
           .sort({ index: 1 })
           .toArray();
 
         if (!chunks.length) {
-          return res.status(404).json({ error: "Video data not found." });
+          return res.status(404).json({ error: "Video chunks not found." });
         }
 
         const combined = Buffer.concat(chunks.map((c) => toNodeBuffer(c.data)));
-        const offsetInCombined = start - firstChunkIndex * chunkSize;
-        const length = end - start + 1;
-        const slice = combined.subarray(offsetInCombined, offsetInCombined + length);
+        const sliceStart = start - startChunk * chunkSize;
+        const sliceEnd = end - startChunk * chunkSize + 1;
+        const payload = combined.subarray(sliceStart, sliceEnd);
 
-        res.setHeader("Content-Type", item.mimeType || "video/mp4");
+        res.setHeader("Content-Type", mimeType);
         res.setHeader("Accept-Ranges", "bytes");
-        res.setHeader("Content-Range", `bytes ${start}-${end}/${totalSize}`);
-        res.setHeader("Content-Length", slice.length);
+        res.setHeader("Content-Length", payload.length);
         res.setHeader("Cache-Control", "private, max-age=3600");
-        return res.status(206).send(slice);
+
+        if (isPartial) {
+          res.setHeader("Content-Range", `bytes ${start}-${start + payload.length - 1}/${totalSize}`);
+          return res.status(206).send(payload);
+        }
+
+        return res.status(200).send(payload);
       }
 
-      // Otherwise return list of ready vault items
+      // 2. LIST ALL READY ARCHIVE VIDEOS
       const docs = await vaultItems
         .find({ status: "ready" })
         .sort({ createdAt: -1 })
-        .limit(40)
+        .limit(50)
         .toArray();
 
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({
-        isArtist: isArtistMember(member),
-        items: docs.map((doc) => serializeVaultItem(doc, member.memberId)),
+        items: docs.map((doc) => formatVaultItem(doc, member.memberId)),
       });
     }
 
     // ------------------------------------------------------------------------
-    // POST /api/vault — init, chunk, complete, react, delete
+    // POST /api/vault — Emoji reactions (members) & Uploads/Deletes (artist)
     // ------------------------------------------------------------------------
     if (req.method === "POST") {
       const body =
         typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
       const { action, memberId, email } = body;
 
-      const member = await findVerifiedMember(db, memberId, email);
+      const member = await findMember(db, memberId, email);
       if (!member) {
         return res.status(401).json({
-          error: "Members only. Please sign in to continue.",
+          error: "Members only. Please sign in to access the Club Archive.",
         });
       }
 
@@ -236,7 +244,7 @@ export default async function handler(req, res) {
       if (action === "react") {
         const { vaultId, emoji } = body;
         if (!ObjectId.isValid(vaultId)) {
-          return res.status(400).json({ error: "Invalid vault item ID." });
+          return res.status(400).json({ error: "Invalid archive item ID." });
         }
         if (!ALLOWED_EMOJIS.has(emoji)) {
           return res.status(400).json({ error: "Unsupported emoji reaction." });
@@ -245,13 +253,13 @@ export default async function handler(req, res) {
         const vaultObjectId = new ObjectId(vaultId);
         const item = await vaultItems.findOne({ _id: vaultObjectId, status: "ready" });
         if (!item) {
-          return res.status(404).json({ error: "Vault item not found." });
+          return res.status(404).json({ error: "Archive item not found." });
         }
 
-        const currentReactors = Array.isArray(item.reactions?.[emoji])
+        const currentVoters = Array.isArray(item.reactions?.[emoji])
           ? item.reactions[emoji]
           : [];
-        const hasReacted = currentReactors.includes(member.memberId);
+        const hasReacted = currentVoters.includes(member.memberId);
 
         const updateOp = hasReacted
           ? { $pull: { [`reactions.${emoji}`]: member.memberId } }
@@ -261,135 +269,153 @@ export default async function handler(req, res) {
         const updated = await vaultItems.findOne({ _id: vaultObjectId });
 
         return res.status(200).json({
-          item: serializeVaultItem(updated, member.memberId),
+          item: formatVaultItem(updated, member.memberId),
         });
       }
 
       // All remaining actions (init, chunk, complete, delete) are ARTIST / ADMIN ONLY
       if (!isArtistMember(member)) {
         return res.status(403).json({
-          error: "Only raveyn can upload or manage vault videos.",
+          error: "Only raveyn can upload or manage archive videos.",
         });
       }
 
-      // 2. INIT CHUNKED UPLOAD
+      // 2. INITIALIZE CHUNKED UPLOAD
       if (action === "init") {
-        const cleanTitle = String(body.title || "").trim();
+        const cleanTitle = String(body.title || "").trim().slice(0, 100);
         const cleanCategory = String(body.category || "demo").trim().toLowerCase();
         const cleanCaption = String(body.caption || "").trim().slice(0, 280);
-        const cleanMime = String(body.mimeType || "video/mp4").trim().toLowerCase();
-        const fileSize = Number(body.fileSize || 0);
-        const chunkCount = Number(body.chunkCount || 0);
-        const chunkSize = Number(body.chunkSize || 1536 * 1024);
+        const mimeType = String(body.mimeType || "video/mp4").trim();
+        const fileSize = Number(body.fileSize) || 0;
+        const chunkCount = Number(body.chunkCount) || 0;
+        const chunkSize = Number(body.chunkSize) || 1536 * 1024;
 
-        if (!cleanTitle || cleanTitle.length > 100) {
-          return res.status(400).json({ error: "Please enter a title (max 100 characters)." });
+        if (!cleanTitle) {
+          return res.status(400).json({ error: "Please provide a title for the video." });
         }
         if (!ALLOWED_CATEGORIES.has(cleanCategory)) {
-          return res.status(400).json({ error: "Category must be demo, snippet, or teaser." });
+          return res.status(400).json({ error: "Invalid category. Use demo, snippet, or teaser." });
         }
-        if (!cleanMime.startsWith("video/")) {
-          return res.status(400).json({ error: "Only video files (MP4, WebM, MOV) are supported." });
+        if (!mimeType.startsWith("video/")) {
+          return res.status(400).json({ error: "Only video files are allowed." });
         }
-        if (!Number.isFinite(fileSize) || fileSize <= 0 || fileSize > MAX_VIDEO_BYTES) {
-          return res.status(400).json({
-            error: "Video file must be under 50 MB.",
-          });
+        if (fileSize <= 0 || fileSize > MAX_VIDEO_BYTES) {
+          return res.status(400).json({ error: "Video must be between 1 byte and 50 MB." });
         }
-        if (!Number.isInteger(chunkCount) || chunkCount < 1 || chunkCount > 60) {
-          return res.status(400).json({ error: "Invalid video chunk count." });
+        if (chunkCount <= 0 || chunkCount > 100) {
+          return res.status(400).json({ error: "Invalid chunk count." });
         }
 
-        const emptyReactions = {};
-        for (const emoji of ALLOWED_EMOJIS) emptyReactions[emoji] = [];
-
-        const insertResult = await vaultItems.insertOne({
+        const insertRes = await vaultItems.insertOne({
           title: cleanTitle,
           category: cleanCategory,
           caption: cleanCaption,
-          mimeType: cleanMime,
+          mimeType,
           fileSize,
           chunkCount,
           chunkSize,
           status: "uploading",
-          uploadedBy: {
-            memberId: member.memberId,
-            handle: member.handle,
-          },
-          reactions: emptyReactions,
+          uploadedBy: member.handle || "@raveyn",
+          uploadedByMemberId: member.memberId,
+          reactions: {},
           createdAt: new Date(),
         });
 
         return res.status(201).json({
-          vaultId: insertResult.insertedId.toString(),
+          vaultId: insertRes.insertedId.toString(),
         });
       }
 
-      // 3. UPLOAD SINGLE VIDEO CHUNK
+      // 3. UPLOAD INDIVIDUAL VIDEO CHUNK
       if (action === "chunk") {
         const { vaultId, index, dataBase64 } = body;
         if (!ObjectId.isValid(vaultId)) {
-          return res.status(400).json({ error: "Invalid upload session." });
+          return res.status(400).json({ error: "Invalid archive upload ID." });
         }
-        if (!Number.isInteger(index) || index < 0 || !dataBase64) {
-          return res.status(400).json({ error: "Missing video chunk data." });
+        const chunkIndex = Number(index);
+        if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
+          return res.status(400).json({ error: "Invalid chunk index." });
+        }
+        if (typeof dataBase64 !== "string" || !dataBase64.length) {
+          return res.status(400).json({ error: "Missing chunk data." });
+        }
+
+        const vaultObjectId = new ObjectId(vaultId);
+        const item = await vaultItems.findOne({ _id: vaultObjectId });
+        if (!item) {
+          return res.status(404).json({ error: "Upload session not found." });
         }
 
         const buffer = Buffer.from(dataBase64, "base64");
-        const vaultObjectId = new ObjectId(vaultId);
-
         await vaultChunks.updateOne(
-          { vaultId: vaultObjectId, index },
-          { $set: { vaultId: vaultObjectId, index, data: buffer } },
+          { vaultId: vaultObjectId, index: chunkIndex },
+          {
+            $set: {
+              vaultId: vaultObjectId,
+              index: chunkIndex,
+              data: new Binary(buffer),
+            },
+          },
           { upsert: true }
         );
 
-        return res.status(200).json({ ok: true, index });
+        return res.status(200).json({ ok: true, index: chunkIndex });
       }
 
-      // 4. COMPLETE UPLOAD
+      // 4. FINALIZE CHUNKED UPLOAD
       if (action === "complete") {
         const { vaultId } = body;
         if (!ObjectId.isValid(vaultId)) {
-          return res.status(400).json({ error: "Invalid upload session." });
+          return res.status(400).json({ error: "Invalid archive upload ID." });
         }
 
         const vaultObjectId = new ObjectId(vaultId);
+        const item = await vaultItems.findOne({ _id: vaultObjectId });
+        if (!item) {
+          return res.status(404).json({ error: "Upload session not found." });
+        }
+
+        const uploadedChunks = await vaultChunks.countDocuments({ vaultId: vaultObjectId });
+        if (uploadedChunks < (item.chunkCount || 1)) {
+          return res.status(400).json({
+            error: "Some video chunks are missing. Please try uploading again.",
+          });
+        }
+
         await vaultItems.updateOne(
           { _id: vaultObjectId },
-          { $set: { status: "ready" } }
+          { $set: { status: "ready", updatedAt: new Date() } }
         );
 
-        const readyDoc = await vaultItems.findOne({ _id: vaultObjectId });
+        const readyItem = await vaultItems.findOne({ _id: vaultObjectId });
         return res.status(200).json({
-          ok: true,
-          item: serializeVaultItem(readyDoc, member.memberId),
+          item: formatVaultItem(readyItem, member.memberId),
         });
       }
 
-      // 5. DELETE VAULT VIDEO
+      // 5. DELETE ARCHIVE VIDEO
       if (action === "delete") {
         const { vaultId } = body;
         if (!ObjectId.isValid(vaultId)) {
-          return res.status(400).json({ error: "Invalid vault item ID." });
+          return res.status(400).json({ error: "Invalid archive item ID." });
         }
 
         const vaultObjectId = new ObjectId(vaultId);
         await vaultChunks.deleteMany({ vaultId: vaultObjectId });
         await vaultItems.deleteOne({ _id: vaultObjectId });
 
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, deletedId: vaultId });
       }
 
-      return res.status(400).json({ error: "Unknown vault action." });
+      return res.status(400).json({ error: "Unknown archive action." });
     }
 
     res.setHeader("Allow", ["GET", "POST"]);
     return res.status(405).json({ error: "Method not allowed." });
   } catch (error) {
-    console.error("MongoDB Club Vault Error:", error);
+    console.error("MongoDB Club Archive Error:", error);
     return res.status(500).json({
-      error: "Server error while accessing the Club Vault. Please try again.",
+      error: "Server error while accessing the Club Archive. Please try again.",
     });
   }
 }

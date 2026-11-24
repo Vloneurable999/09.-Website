@@ -245,7 +245,7 @@ function renderVaultItems() {
       <div class="col-span-full rounded-3xl bg-white/[0.02] border border-white/10 py-12 px-6 text-center">
         <span class="text-2xl text-fuchsia-400/80">✦</span>
         <p class="mt-2 text-sm font-medium text-zinc-200">
-          ${activeCategory === "all" ? "The vault is quiet right now" : `No ${activeCategory}s uploaded yet`}
+          ${activeCategory === "all" ? "The archive is quiet right now" : `No ${activeCategory}s uploaded yet`}
         </p>
         <p class="mt-1 text-xs text-zinc-500">
           ${canManage ? "Use your Artist Studio panel above to drop a new demo, snippet, or teaser." : "Check back soon for unreleased demos, snippets, and teasers from raveyn."}
@@ -367,18 +367,18 @@ async function fetchVaultItems() {
     if (!response.ok) {
       const fallbackMsg =
         response.status === 404
-          ? "Vault API (/api/vault) not found. Make sure api/vault.js is pushed and deployed on Vercel."
-          : `Unable to load Club Vault (Error ${response.status}).`;
+          ? "Archive API (/api/vault) not found. Make sure api/vault.js is pushed and deployed on Vercel."
+          : `Unable to load Club Archive (Error ${response.status}).`;
       throw new Error(data.error || fallbackMsg);
     }
 
     vaultItems = Array.isArray(data.items) ? data.items : [];
     renderVaultItems();
   } catch (err) {
-    setVaultError(err.message || "Could not load Club Vault.");
+    setVaultError(err.message || "Could not load Club Archive.");
     grid.innerHTML = `
       <div class="col-span-full py-10 text-center text-xs font-mono text-rose-300">
-        Unable to load Club Vault.
+        Unable to load Club Archive.
       </div>
     `;
   }
@@ -451,7 +451,7 @@ async function handleDeleteClick(vaultId) {
 
     vaultItems = vaultItems.filter((it) => it.id !== vaultId);
     renderVaultItems();
-    showToast("Removed from Club Vault.");
+    showToast("Removed from Club Archive.");
   } catch (err) {
     showToast(err.message || "Delete failed.");
   }
@@ -466,7 +466,7 @@ async function handleVaultUpload(event) {
 
   const member = getCurrentMember();
   if (!member || !isArtistUser(member)) {
-    setUploadError("Only raveyn can upload to the Club Vault.");
+    setUploadError("Only raveyn can upload to the Club Archive.");
     return;
   }
 
@@ -504,7 +504,7 @@ async function handleVaultUpload(event) {
   }
 
   isUploading = true;
-  const originalBtnText = uploadBtn ? uploadBtn.textContent : "Upload to Vault ✦";
+  const originalBtnText = uploadBtn ? uploadBtn.textContent : "Upload to Archive ✦";
   if (uploadBtn) {
     uploadBtn.disabled = true;
     uploadBtn.textContent = "Uploading...";
@@ -591,7 +591,7 @@ async function handleVaultUpload(event) {
     }
 
     if (progressBar) progressBar.style.width = "100%";
-    if (progressText) progressText.textContent = "Published to Club Vault!";
+    if (progressText) progressText.textContent = "Published to Club Archive!";
 
     document.getElementById("vaultUploadForm")?.reset();
     const fileLabel = document.getElementById("vaultSelectedFileName");
@@ -601,7 +601,7 @@ async function handleVaultUpload(event) {
     activeCategory = "all";
     updateFilterButtons();
     renderVaultItems();
-    showToast(`Uploaded "${completeData.item.title}" to Club Vault!`);
+    showToast(`Uploaded "${completeData.item.title}" to Club Archive!`);
   } catch (err) {
     setUploadError(err.message || "Upload failed. Please try again.");
   } finally {
@@ -676,7 +676,7 @@ export function initVault() {
   // Refresh button
   document.getElementById("vaultRefreshBtn")?.addEventListener("click", async () => {
     await fetchVaultItems();
-    showToast("Club Vault refreshed!");
+    showToast("Club Archive refreshed!");
   });
 
   // Sync automatically whenever auth state changes
@@ -687,6 +687,16 @@ export function initVault() {
     } else {
       vaultItems = [];
       renderVaultItems();
+    }
+  });
+
+  // Refresh archive when navigating onto the dedicated Archive page
+  window.addEventListener("raveyns:view-changed", (event) => {
+    if (event.detail?.view === "archive" || event.detail?.view === "vault") {
+      syncVaultAuthUI();
+      if (getCurrentMember()) {
+        fetchVaultItems();
+      }
     }
   });
 

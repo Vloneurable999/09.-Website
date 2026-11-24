@@ -298,18 +298,20 @@ function updateMemberUI() {
 
 /**
  * Switches between dedicated pages: Home ("hub"), Socials ("socials"),
- * Club Vault ("vault"), Club Chat ("chat"), and Sign Up / Log In ("signup"/"login").
+ * Club Archive ("archive"), Club Chat ("chat"), and Sign Up / Log In ("signup"/"login").
  */
 function showView(view) {
   const pages = {
     hub: document.getElementById("top"),
     socials: document.getElementById("socialsPage"),
-    vault: document.getElementById("vaultPage"),
+    archive: document.getElementById("vaultPage"),
     chat: document.getElementById("chatPage"),
     signup: document.getElementById("signupPage"),
   };
 
-  const targetKey = view === "login" ? "signup" : pages[view] ? view : "hub";
+  const normalizedView = view === "vault" ? "archive" : view;
+  const targetKey =
+    normalizedView === "login" ? "signup" : pages[normalizedView] ? normalizedView : "hub";
 
   Object.entries(pages).forEach(([key, el]) => {
     if (!el) return;
@@ -615,18 +617,18 @@ export function initSignup() {
   });
 
   // Password toggles
-  bindPasswordToggle("signupPassword", "togglePasswordBtn");
-  bindPasswordToggle("loginPassword", "toggleLoginPasswordBtn");
-
-  // Form submissions
-  document.getElementById("signupForm")?.addEventListener("submit", handleSignupSubmit);
-  document.getElementById("loginForm")?.addEventListener("submit", handleLoginSubmit);
-
-  // Support direct links to #socials, #vault, #chat, #signup, #login, and browser Back button
+  // Support direct links to #socials, #archive, #chat, #signup, #login, and browser Back button
   const syncRouteFromHash = () => {
     const hash = window.location.hash.replace(/^#/, "").toLowerCase();
-    if (hash === "signup" || hash === "login" || hash === "socials" || hash === "vault" || hash === "chat") {
-      showView(hash);
+    if (
+      hash === "signup" ||
+      hash === "login" ||
+      hash === "socials" ||
+      hash === "archive" ||
+      hash === "vault" ||
+      hash === "chat"
+    ) {
+      showView(hash === "vault" ? "archive" : hash);
     } else {
       showView("hub");
     }
