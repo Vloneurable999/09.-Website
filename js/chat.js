@@ -17,6 +17,7 @@ let pollTimer = null;
 let lastRenderedKey = "";
 let isSending = false;
 let cachedMember = null;
+let chatInitialized = false;
 
 /**
  * Safely escapes HTML entities to prevent XSS in chat messages.
@@ -214,7 +215,11 @@ async function fetchMessages({ silent = false, forceScroll = false } = {}) {
     }
 
     if (!response.ok) {
-      throw new Error(data.error || `Unable to load chat (Error ${response.status}).`);
+      const fallbackMsg =
+        response.status === 404
+          ? "Chat API (/api/chat) not found. Make sure api/chat.js is pushed and deployed on Vercel."
+          : `Unable to load chat (Error ${response.status}).`;
+      throw new Error(data.error || fallbackMsg);
     }
 
     setChatError("");
@@ -291,7 +296,11 @@ async function handleChatSubmit(event) {
     }
 
     if (!response.ok) {
-      throw new Error(data.error || `Could not send message (Error ${response.status}).`);
+      const fallbackMsg =
+        response.status === 404
+          ? "Chat API (/api/chat) not found. Make sure api/chat.js is pushed and deployed on Vercel."
+          : `Could not send message (Error ${response.status}).`;
+      throw new Error(data.error || fallbackMsg);
     }
 
     input.value = "";
@@ -324,9 +333,13 @@ function startPolling() {
  * Initializes the Club Chat UI, listeners, and live polling.
  */
 export function initChat() {
+  if (chatInitialized) return;
+
   const chatSection = document.getElementById("chat");
   if (!chatSection) return;
 
+  chatInitialized = true;
+  window.__raveynsChatReady = true;
   syncChatAuthUI();
   fetchMessages({ silent: false, forceScroll: true });
   startPolling();
@@ -375,4 +388,11 @@ export function initChat() {
       fetchMessages({ silent: true, forceScroll: false });
     }
   });
+}
+
+// Auto-boot Club Chat when loaded directly via <script type="module" src="./js/chat.js">
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initChat);
+} else {
+  initChat();
 }

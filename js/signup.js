@@ -113,6 +113,9 @@ function updateMemberUI() {
   const signupFormView = document.getElementById("signupFormView");
   const loginFormView = document.getElementById("loginFormView");
   const memberPassView = document.getElementById("memberPassView");
+  const chatForm = document.getElementById("chatForm");
+  const chatLockedPrompt = document.getElementById("chatLockedPrompt");
+  const chatActiveUser = document.getElementById("chatActiveUser");
 
   if (currentMember) {
     navLoginBtn?.classList.add("hidden");
@@ -122,6 +125,14 @@ function updateMemberUI() {
     signupFormView?.classList.add("hidden");
     loginFormView?.classList.add("hidden");
     memberPassView?.classList.remove("hidden");
+
+    // Hide chat login/signup buttons and unlock the chat composer
+    chatLockedPrompt?.classList.add("hidden");
+    chatForm?.classList.remove("hidden");
+    if (chatActiveUser) {
+      const idSuffix = currentMember.memberId ? ` (${currentMember.memberId})` : "";
+      chatActiveUser.textContent = `Posting as ${currentMember.handle}${idSuffix}`;
+    }
 
     const idEl = document.getElementById("memberPassId");
     const handleEl = document.getElementById("memberPassHandle");
@@ -140,6 +151,10 @@ function updateMemberUI() {
 
     authTabs?.classList.remove("hidden");
     memberPassView?.classList.add("hidden");
+
+    // Show chat login/signup buttons and hide the chat composer
+    chatForm?.classList.add("hidden");
+    chatLockedPrompt?.classList.remove("hidden");
   }
 
   // Notify other modules (like js/chat.js) that auth state changed
@@ -423,4 +438,11 @@ export function initSignup() {
 
   window.addEventListener("hashchange", syncRouteFromHash);
   syncRouteFromHash();
+
+  // Ensure Club Chat is booted so logged-in members can send messages immediately
+  if (!window.__raveynsChatReady && document.getElementById("chat")) {
+    import("./chat.js")
+      .then((mod) => mod.initChat?.())
+      .catch((err) => console.error("Failed to boot Club Chat from signup.js:", err));
+  }
 }
