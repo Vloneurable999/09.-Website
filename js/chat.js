@@ -133,7 +133,7 @@ function renderMessages(messages, forceScroll = false) {
   const member = getCurrentMember();
   const renderKey = JSON.stringify({
     me: member?.memberId || member?.handle || "",
-    ids: messages.map((m) => m.id),
+    items: messages.map((m) => `${m.id}:${m.role || ""}:${(m.badges || []).join(",")}`),
   });
 
   if (!forceScroll && renderKey === lastRenderedKey) return;
@@ -160,21 +160,40 @@ function renderMessages(messages, forceScroll = false) {
         member &&
         ((member.memberId && msg.memberId === member.memberId) ||
           String(msg.handle || "").toLowerCase() === String(member.handle || "").toLowerCase());
-      const isArtist = ARTIST_HANDLES.has(String(msg.handle || "").toLowerCase());
+      const badges =
+        typeof config.getMemberBadges === "function"
+          ? config.getMemberBadges(msg.memberId, msg.badges, msg.role, msg.handle)
+          : [
+              ARTIST_HANDLES.has(String(msg.handle || "").toLowerCase())
+                ? {
+                    key: "artist",
+                    label: "ARTIST ✦",
+                    badgeClass: "bg-pink-500/20 text-pink-200 border-pink-400/40",
+                  }
+                : {
+                    key: "member",
+                    label: "MEMBER",
+                    badgeClass: "bg-white/[0.06] text-zinc-300 border-white/15",
+                  },
+            ];
+
       const safeHandle = escapeHtml(msg.handle);
       const safeId = escapeHtml(msg.memberId);
       const safeText = escapeHtml(msg.text);
       const timeLabel = formatTimestamp(msg.createdAt);
 
-      const artistBadge = isArtist
-        ? `<span class="px-1.5 py-0.5 rounded-md text-[9px] font-mono uppercase tracking-wider bg-pink-500/20 text-pink-200 border border-pink-400/40">ARTIST ✦</span>`
-        : "";
+      const stackedBadgesHtml = badges
+        .map(
+          (b) =>
+            `<span class="px-1.5 py-0.5 rounded-md text-[9px] font-mono uppercase tracking-wider border ${b.badgeClass}">${escapeHtml(b.label)}</span>`
+        )
+        .join("");
 
       return `
         <div class="flex flex-col ${isMine ? "items-end" : "items-start"}">
           <div class="flex items-center gap-1.5 mb-1 px-1 flex-wrap ${isMine ? "justify-end" : "justify-start"}">
             <span class="text-xs font-semibold ${isMine ? "text-fuchsia-200" : "text-zinc-200"}">${safeHandle}</span>
-            ${artistBadge}
+            ${stackedBadgesHtml}
             <span class="font-mono text-[10px] text-zinc-500">${safeId}</span>
             <span class="font-mono text-[10px] text-zinc-600">· ${timeLabel}</span>
           </div>

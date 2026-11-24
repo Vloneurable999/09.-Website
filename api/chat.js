@@ -35,39 +35,39 @@ async function getDatabase() {
 export default async function handler(req, res) {
   try {
     const db = await getDatabase();
-    const chatCollection = db.collection("chat_messages");
-
-    // ------------------------------------------------------------------------
-    // GET /api/chat — Return the latest 50 messages in chronological order
-    // ------------------------------------------------------------------------
-    if (req.method === "GET") {
-      const docs = await chatCollection
-        .find({})
-        .sort({ createdAt: -1 })
-        .limit(FETCH_LIMIT)
-        .toArray();
-
-      // Look up live roles from the members collection by memberId
+      // Look up live roles & stacked badges from the members collection by memberId
       const uniqueMemberIds = [...new Set(docs.map((d) => d.memberId).filter(Boolean))];
-      const memberRolesMap = new Map();
+      const memberMetaMap = new Map();
       if (uniqueMemberIds.length > 0) {
         const memberDocs = await db
           .collection("members")
-          .find({ memberId: { $in: uniqueMemberIds } }, { projection: { memberId: 1, role: 1 } })
+          .find(
+            { memberId: { $in: uniqueMemberIds } },
+            { projection: { memberId: 1, role: 1, badges: 1 } }
+          )
           .toArray();
         memberDocs.forEach((m) => {
-          if (m.memberId && m.role) memberRolesMap.set(m.memberId, m.role);
+          if (m.memberId) {
+            memberMetaMap.set(m.memberId, {
+              role: m.role || "member",
+              badges: Array.isArray(m.badges) ? m.badges : [],
+            });
+          }
         });
       }
 
-      const messages = docs.reverse().map((doc) => ({
-        id: doc._id.toString(),
-        memberId: doc.memberId,
-        role: memberRolesMap.get(doc.memberId) || doc.role || "member",
-        handle: doc.handle,
-        text: doc.text,
-        createdAt: doc.createdAt,
-      }));
+      const messages = docs.reverse().map((doc) => {
+        const liveMeta = memberMetaMap.get(doc.memberId);
+        return {
+          id: doc._id.toString(),
+          memberId: doc.memberId,
+          role: liveMeta?.role || doc.role || "member",
+          badges: liveMeta?.badges?.length ? liveMeta.badges : doc.badges || [],
+          handle: doc.handle,
+          text: doc.text,
+          createdAt: doc.createdAt,
+        };
+      });
 
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ messages });
@@ -104,15 +104,14 @@ export default async function handler(req, res) {
 
       const member = await membersCollection.findOne({ $or: lookupClauses });
 
-      if (!member) {
-        return res.status(401).json({
-          error: "Invalid member pass. Please sign out and log back in.",
-        });
-      }
+      const memberBadges = Array.isArray(member.badges) && member.badges.length
+        ? member.badges
+        : [member.role || "member"];
 
       const newMessage = {
         memberId: member.memberId,
-        role: member.role || "member",
+        role: member.role || memberBadges[0] || "member",
+        badges: memberBadges,
         handle: member.handle,
         text: cleanText,
         createdAt: new Date(),
@@ -125,6 +124,7 @@ export default async function handler(req, res) {
           id: insertResult.insertedId.toString(),
           memberId: newMessage.memberId,
           role: newMessage.role,
+          badges: newMessage.badges,
           handle: newMessage.handle,
           text: newMessage.text,
           createdAt: newMessage.createdAt,

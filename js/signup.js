@@ -6,7 +6,7 @@
  * whenever the auth state changes.
  * ============================================================================
  */
-import { SIGNUP_API_URL, LOGIN_API_URL, getMemberRole } from "./config.js";
+import { SIGNUP_API_URL, LOGIN_API_URL, getMemberBadges } from "./config.js";
 import { showToast } from "./ui.js";
 
 const STORAGE_KEY = "raveyns_club_member";
@@ -142,20 +142,26 @@ function updateMemberUI() {
     }
 
     const idEl = document.getElementById("memberPassId");
-    const roleEl = document.getElementById("memberPassRole");
+    const badgesEl = document.getElementById("memberPassBadges");
     const handleEl = document.getElementById("memberPassHandle");
     const emailEl = document.getElementById("memberPassEmail");
     const alertsEl = document.getElementById("memberPassAlerts");
 
     if (idEl) idEl.textContent = currentMember.memberId || "#RV-0001";
-    if (roleEl) {
-      const roleInfo = getMemberRole(
+    if (badgesEl) {
+      const badges = getMemberBadges(
         currentMember.memberId,
+        currentMember.badges,
         currentMember.role,
         currentMember.handle
       );
-      roleEl.textContent = roleInfo.label;
-      roleEl.className = `px-2 py-0.5 rounded-md text-[10px] font-mono uppercase tracking-wider border ${roleInfo.badgeClass}`;
+      badgesEl.innerHTML = "";
+      badges.forEach((badge) => {
+        const pill = document.createElement("span");
+        pill.textContent = badge.label;
+        pill.className = `px-2 py-0.5 rounded-md text-[10px] font-mono uppercase tracking-wider border ${badge.badgeClass}`;
+        badgesEl.appendChild(pill);
+      });
     }
     if (handleEl) handleEl.textContent = currentMember.handle;
     if (emailEl) emailEl.textContent = currentMember.email;

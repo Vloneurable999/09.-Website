@@ -10,6 +10,7 @@ import crypto from "crypto";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || "raveyns_club";
+const OG_PROMO_CUTOFF = new Date("2026-12-01T23:59:59-06:00");
 
 /**
  * Reuse the MongoDB connection across warm Vercel serverless invocations.
@@ -74,28 +75,35 @@ export default async function handler(req, res) {
 
     const db = await getDatabase();
     const members = db.collection("members");
-
-    // Check if the user entered an email address or a username/handle
-    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawIdentifier);
-    let query;
-
-    if (isEmail) {
-      query = { email: rawIdentifier.toLowerCase() };
-    } else {
-      const strippedHandle = rawIdentifier.replace(/^@+/, "");
-      query = { handle: { $regex: `^@?${escapeRegex(strippedHandle)}$`, $options: "i" } };
+    // Collect and stack all badges saved on the member (plus backfill OG if joined by Dec 1st)
+    const badgeSet = new Set();
+    if (Array.isArray(member.badges)) {
+      member.badges.forEach((b) => {
+        if (b) badgeSet.add(String(b).toLowerCase());
+      });
+    }
+    if (member.role) {
+      badgeSet.add(String(member.role).toLowerCase());
+    }
+    const createdDate = member.createdAt ? new Date(member.createdAt) : null;
+    if (createdDate && createdDate <= OG_PROMO_CUTOFF) {
+      badgeSet.add("og");
+    }
+    if (badgeSet.size > 1 && badgeSet.has("member")) {
+      badgeSet.delete("member");
+    }
+    if (badgeSet.size === 0) {
+      badgeSet.add("member");
     }
 
-    const member = await members.findOne(query);
-    if (!member || !verifyPassword(cleanPassword, member.passwordHash)) {
-      return res.status(401).json({ error: "Invalid email/username or password." });
-    }
+    const resolvedBadges = [...badgeSet];
 
     // Return safe member data (never return passwordHash)
     return res.status(200).json({
       member: {
         memberId: member.memberId,
-        role: member.role || "member",
+        role: resolvedBadges[0],
+        badges: resolvedBadges,
         handle: member.handle,
         email: member.email,
         optInDrops: Boolean(member.optInDrops),

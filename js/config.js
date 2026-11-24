@@ -47,27 +47,88 @@ export const MEMBER_ROLES = {
 };
 
 /**
- * Map specific Member IDs to roles here (overrides default role).
- * Example: "#RV-0002": "mod", "#RV-0003": "vip"
+ * Display priority order when stacking multiple badges.
+ */
+export const BADGE_PRIORITY = ["artist", "admin", "mod", "vip", "og", "member"];
+
+/**
+ * Map specific Member IDs to one or more stacked badges here.
+ * Accepts a single badge key or an array of badge keys.
+ * Example: "#RV-0002": ["mod", "og"], "#RV-0003": ["vip", "og"]
  */
 export const MEMBER_ID_ROLES = {
-  "#RV-0001": "artist",
+  "#RV-0001": ["artist", "og"],
 };
 
 /**
- * Resolves a member's role from MEMBER_ID_ROLES, their database role,
- * or automatic Member ID tier (#RV-0002 to #RV-0025 = OG, #RV-0026+ = Member).
+ * Resolves ALL collected badges for a member (stacking config overrides,
+ * MongoDB badges array, legacy single role, and artist handle checks).
  */
-export function getMemberRole(memberId = "", dbRole = "", handle = "") {
+export function getMemberBadges(memberId = "", dbBadges = [], dbRole = "", handle = "") {
   const normalizedId = String(memberId || "").trim().toUpperCase();
   const normalizedHandle = String(handle || "").trim().toLowerCase();
-  const normalizedDbRole = String(dbRole || "").trim().toLowerCase();
+  const badgeSet = new Set();
 
-  let roleKey = MEMBER_ID_ROLES[normalizedId];
-
-  if (!roleKey && (normalizedHandle === "@raveyn" || normalizedHandle === "@itsraveyn")) {
-    roleKey = "artist";
+  // 1. Add badges assigned to this Member ID in MEMBER_ID_ROLES
+  const idOverride = MEMBER_ID_ROLES[normalizedId];
+  if (Array.isArray(idOverride)) {
+    idOverride.forEach((b) => {
+      const key = String(b || "").trim().toLowerCase();
+      if (MEMBER_ROLES[key]) badgeSet.add(key);
+    });
+  } else if (typeof idOverride === "string" && MEMBER_ROLES[idOverride.toLowerCase()]) {
+    badgeSet.add(idOverride.toLowerCase());
   }
+
+  // 2. Add Artist badge automatically for raveyn's official handles or #RV-0001
+  const numMatch = normalizedId.match(/^#RV-(\d+)$/);
+  const passNumber = numMatch ? parseInt(numMatch[1], 10) : 0;
+  if (
+    passNumber === 1 ||
+    normalizedHandle === "@raveyn" ||
+    normalizedHandle === "@itsraveyn"
+  ) {
+    badgeSet.add("artist");
+  }
+
+  // 3. Add all collected badges stored in MongoDB (badges array)
+  if (Array.isArray(dbBadges)) {
+    dbBadges.forEach((b) => {
+      const key = String(b || "").trim().toLowerCase();
+      if (MEMBER_ROLES[key]) badgeSet.add(key);
+    });
+  }
+
+  // 4. Merge legacy single role field if present
+  const normalizedDbRole = String(dbRole || "").trim().toLowerCase();
+  if (normalizedDbRole && MEMBER_ROLES[normalizedDbRole]) {
+    badgeSet.add(normalizedDbRole);
+  }
+
+  // Only show "member" if no other badges have been collected yet
+  if (badgeSet.size > 1 && badgeSet.has("member")) {
+    badgeSet.delete("member");
+  }
+  if (badgeSet.size === 0) {
+    badgeSet.add("member");
+  }
+
+  // Sort badges by priority so higher-tier badges always appear first
+  const sortedKeys = [...badgeSet].sort((a, b) => {
+    const idxA = BADGE_PRIORITY.indexOf(a);
+    const idxB = BADGE_PRIORITY.indexOf(b);
+    return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+  });
+
+  return sortedKeys.map((key) => ({ key, ...MEMBER_ROLES[key] }));
+}
+
+/**
+ * Returns the primary (highest-priority) badge for backwards compatibility.
+ */
+export function getMemberRole(memberId = "", dbRole = "", handle = "", dbBadges = []) {
+  return getMemberBadges(memberId, dbBadges, dbRole, handle)[0];
+}
 
   if (!roleKey && normalizedDbRole && MEMBER_ROLES[normalizedDbRole]) {
     roleKey = normalizedDbRole;
@@ -76,13 +137,7 @@ export function getMemberRole(memberId = "", dbRole = "", handle = "") {
   if (!roleKey) {
     const numMatch = normalizedId.match(/^#RV-(\d+)$/);
     const passNumber = numMatch ? parseInt(numMatch[1], 10) : 0;
-    if (passNumber === 1) {
-      roleKey = "artist";
-    } else if (passNumber >= 2 && passNumber <= 25) {
-      roleKey = "og";
-    } else {
-      roleKey = "member";
-    }
+    roleKey = passNumber === 1 ? "artist" : "member";
   }
 
   const roleConfig = MEMBER_ROLES[roleKey] || MEMBER_ROLES.member;

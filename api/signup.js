@@ -11,6 +11,8 @@ import crypto from "crypto";
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || "raveyns_club";
+// Anyone who signs up on or before Dec 1, 2026 (11:59:59 PM CST) gets the OG badge
+const OG_PROMO_CUTOFF = new Date("2026-12-01T23:59:59-06:00");
 
 /**
  * Reuse the MongoDB connection across warm Vercel serverless invocations
@@ -90,29 +92,29 @@ export default async function handler(req, res) {
           : "That username is already taken. Please choose another.";
       return res.status(409).json({ error: conflictMsg });
     }
-
-    // Generate sequential club pass number (e.g., #RV-0001, #RV-0002)
-    const memberCount = await members.countDocuments();
-    const passNumber = memberCount + 1;
-    const memberId = `#RV-${String(passNumber).padStart(4, "0")}`;
-
-    // Assign default role based on handle or Member ID number
+    // Collect and stack starting badges (Artist for raveyn, OG for signups through Dec 1st)
+    const now = new Date();
     const lowerHandle = formattedHandle.toLowerCase();
-    let defaultRole = "member";
+    const collectedBadges = [];
     if (passNumber === 1 || lowerHandle === "@raveyn" || lowerHandle === "@itsraveyn") {
-      defaultRole = "artist";
-    } else if (passNumber <= 25) {
-      defaultRole = "og";
+      collectedBadges.push("artist");
+    }
+    if (now <= OG_PROMO_CUTOFF) {
+      collectedBadges.push("og");
+    }
+    if (collectedBadges.length === 0) {
+      collectedBadges.push("member");
     }
 
     const newMember = {
       memberId,
-      role: defaultRole,
+      role: collectedBadges[0],
+      badges: collectedBadges,
       handle: formattedHandle,
       email: cleanEmail,
       passwordHash: hashPassword(cleanPassword),
       optInDrops: Boolean(optInDrops),
-      createdAt: new Date(),
+      createdAt: now,
     };
 
     await members.insertOne(newMember);
@@ -122,6 +124,7 @@ export default async function handler(req, res) {
       member: {
         memberId: newMember.memberId,
         role: newMember.role,
+        badges: newMember.badges,
         handle: newMember.handle,
         email: newMember.email,
         optInDrops: newMember.optInDrops,
