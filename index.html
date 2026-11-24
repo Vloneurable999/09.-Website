@@ -64,12 +64,21 @@
         </span>
       </a>
 
-      <!-- Quick Section Anchors (Hidden on tiny screens, shown sm+) -->
-      <div class="hidden sm:flex items-center gap-1 text-xs font-medium text-zinc-400">
-        <a href="#socials" data-hub-link class="px-3 py-2 rounded-xl hover:text-white hover:bg-white/5 transition-colors">Socials</a>
-        <a href="#uploads" data-hub-link class="px-3 py-2 rounded-xl hover:text-white hover:bg-white/5 transition-colors">Uploads</a>
-        <a href="#vault" data-hub-link class="px-3 py-2 rounded-xl hover:text-white hover:bg-white/5 transition-colors">Vault</a>
-        <a href="#chat" data-hub-link class="px-3 py-2 rounded-xl hover:text-white hover:bg-white/5 transition-colors">Chat</a>
+      <!-- Clean Top Hotbar (Desktop) -->
+      <div class="hidden md:flex items-center gap-1 p-1 rounded-2xl bg-white/[0.04] border border-white/10 text-xs font-medium text-zinc-400" role="navigation" aria-label="Club hotbar">
+        <a href="#top" data-nav-view="hub" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-transparent hover:text-white hover:bg-white/[0.06] transition-all">
+          <span>Home</span>
+        </a>
+        <a href="#socials" data-nav-view="socials" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-transparent hover:text-white hover:bg-white/[0.06] transition-all">
+          <span>Socials</span>
+        </a>
+        <a href="#vault" data-nav-view="vault" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-transparent hover:text-white hover:bg-white/[0.06] transition-all">
+          <span>Vault</span>
+        </a>
+        <a href="#chat" data-nav-view="chat" class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-transparent hover:text-white hover:bg-white/[0.06] transition-all">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+          <span>Chat</span>
+        </a>
       </div>
 
       <!-- Header Action Buttons -->
@@ -110,17 +119,24 @@
         </button>
       </div>
     </nav>
+
+    <!-- Clean Top Hotbar (Mobile / Tablet) -->
+    <div class="md:hidden max-w-4xl mx-auto mt-2 grid grid-cols-4 gap-1 p-1 rounded-2xl bg-zinc-950/75 backdrop-blur-xl border border-white/10 text-xs font-medium text-zinc-400" role="navigation" aria-label="Club hotbar mobile">
+      <a href="#top" data-nav-view="hub" class="py-2 text-center rounded-xl border border-transparent hover:text-white transition-all">Home</a>
+      <a href="#socials" data-nav-view="socials" class="py-2 text-center rounded-xl border border-transparent hover:text-white transition-all">Socials</a>
+      <a href="#vault" data-nav-view="vault" class="py-2 text-center rounded-xl border border-transparent hover:text-white transition-all">Vault</a>
+      <a href="#chat" data-nav-view="chat" class="inline-flex items-center justify-center gap-1.5 py-2 text-center rounded-xl border border-transparent hover:text-white transition-all">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <span>Chat</span>
+      </a>
+    </div>
   </header>
 
-  <!-- Main Content Container -->
+  <!-- Main Content Container (HOME PAGE) -->
   <main id="top" class="max-w-4xl mx-auto px-4 pt-8 pb-20 space-y-10">
-
-    <!-- 0. LIMITED-TIME OG BADGE PROMO BANNER -->
-    <div
-      id="ogPromoBanner"
-      class="relative overflow-hidden rounded-2xl p-[1px] bg-gradient-to-r from-purple-500/60 via-fuchsia-400/60 to-pink-500/60 shadow-neon-purple"
-    >
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-5 py-3 rounded-[15px] bg-[#0c0716]/95 backdrop-blur-xl">
+    <!-- Limited-Time OG Badge Promo Banner (Auto-hides when signed in or after Dec 1st) -->
+    <div id="ogPromoBanner" class="relative overflow-hidden rounded-2xl p-[1px] bg-gradient-to-r from-purple-500/60 via-fuchsia-400/70 to-pink-500/60 shadow-neon-purple">
+      <div class="rounded-[15px] bg-[#0c0716]/95 backdrop-blur-xl px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div class="flex items-center gap-2.5 text-center sm:text-left">
           <span class="flex-shrink-0 px-2 py-0.5 rounded-md text-[10px] font-mono uppercase tracking-wider border bg-purple-500/20 text-purple-200 border-purple-400/40">
             OG ✦
@@ -259,25 +275,61 @@
       <!-- Dynamically populated from ARTIST_CONFIG.musicPlatforms -->
       <div id="musicGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-3.5"></div>
     </section>
+  </main>
 
-    <!-- 3. SOCIALS SECTION -->
-    <section id="socials" class="scroll-mt-24">
-      <div class="flex items-center justify-between mb-3 px-1">
-        <h2 class="font-mono text-xs uppercase tracking-[0.22em] text-fuchsia-300/80 flex items-center gap-2">
-          <span class="text-pink-400">✦</span> Socials
-        </h2>
+  <!-- DEDICATED SOCIALS PAGE VIEW (Hidden by default) -->
+  <section id="socialsPage" class="hidden max-w-4xl mx-auto px-4 pt-8 pb-20 space-y-6">
+    <button
+      type="button"
+      data-back-home
+      class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-zinc-300 bg-white/[0.03] border border-white/10 hover:text-white hover:border-fuchsia-400/40 transition-all cursor-pointer"
+    >
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      <span>Back to Artist Hub</span>
+    </button>
+
+    <div id="socials" class="relative overflow-hidden rounded-3xl bg-white/[0.03] backdrop-blur-xl border border-white/10 p-6 sm:p-8 shadow-2xl shadow-black/50 space-y-6">
+      <div aria-hidden="true" class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-pink-400/70 to-transparent"></div>
+      <div>
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pink-500/10 border border-pink-400/20 mb-3">
+          <span class="w-2 h-2 rounded-full bg-pink-400 animate-pulse"></span>
+          <span class="font-mono text-[11px] uppercase tracking-[0.2em] text-pink-200/90">Official Channels</span>
+        </div>
+        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-fuchsia-200 to-pink-300 bg-clip-text text-transparent">
+          raveyn's Socials
+        </h1>
+        <p class="mt-1.5 text-xs sm:text-sm text-zinc-400">
+          Follow raveyn across every platform for updates, clips, and behind-the-scenes drops.
+        </p>
       </div>
 
       <!-- Dynamically populated from ARTIST_CONFIG.socials -->
       <div id="socialsGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-3.5"></div>
-    </section>
+    </div>
+  </section>
 
-    <!-- 3.5. MEMBERS-ONLY CLUB VAULT (DEMOS, SNIPPETS & TEASERS) -->
-    <section id="vault" class="scroll-mt-24 space-y-4">
+  <!-- DEDICATED CLUB VAULT PAGE VIEW (Hidden by default) -->
+  <section id="vaultPage" class="hidden max-w-4xl mx-auto px-4 pt-8 pb-20 space-y-6">
+    <button
+      type="button"
+      data-back-home
+      class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-zinc-300 bg-white/[0.03] border border-white/10 hover:text-white hover:border-fuchsia-400/40 transition-all cursor-pointer"
+    >
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      <span>Back to Artist Hub</span>
+    </button>
+
+    <div id="vault" class="space-y-4">
       <div class="flex items-center justify-between px-1">
-        <h2 class="font-mono text-xs uppercase tracking-[0.22em] text-fuchsia-300/80 flex items-center gap-2">
+        <h1 class="font-mono text-xs uppercase tracking-[0.22em] text-fuchsia-300/80 flex items-center gap-2">
           <span class="text-purple-400">✦</span> Club Vault
-        </h2>
+        </h1>
         <div class="flex items-center gap-2">
           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono text-purple-200 bg-purple-500/15 border border-purple-400/30">
             MEMBERS ONLY
@@ -305,7 +357,7 @@
             <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
           </svg>
         </div>
-        <h3 class="text-base sm:text-lg font-bold text-white">Unreleased Demos, Snippets &amp; Teasers</h3>
+        <h2 class="text-base sm:text-lg font-bold text-white">Unreleased Demos, Snippets &amp; Teasers</h2>
         <p class="mt-1.5 text-xs sm:text-sm text-zinc-400 max-w-md mx-auto">
           Sign in with your <span class="text-fuchsia-200 font-medium">raveyn's club</span> pass to watch exclusive studio videos and drop emoji reactions.
         </p>
@@ -340,7 +392,7 @@
                 <span class="px-2 py-0.5 rounded-md text-[10px] font-mono uppercase tracking-wider border bg-pink-500/20 text-pink-200 border-pink-400/40">
                   ARTIST ONLY ✦
                 </span>
-                <h3 class="text-sm sm:text-base font-bold text-white">Studio Vault Uploader</h3>
+                <h2 class="text-sm sm:text-base font-bold text-white">Studio Vault Uploader</h2>
               </div>
               <span class="font-mono text-[10px] text-zinc-400">Visible only to you</span>
             </div>
@@ -446,14 +498,28 @@
           </div>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <!-- 4. CLUB CHAT SECTION -->
-    <section id="chat" class="scroll-mt-24">
+  <!-- DEDICATED CLUB CHAT PAGE VIEW (Hidden by default) -->
+  <section id="chatPage" class="hidden max-w-4xl mx-auto px-4 pt-8 pb-20 space-y-6">
+    <button
+      type="button"
+      data-back-home
+      class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-medium text-zinc-300 bg-white/[0.03] border border-white/10 hover:text-white hover:border-fuchsia-400/40 transition-all cursor-pointer"
+    >
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      <span>Back to Artist Hub</span>
+    </button>
+
+    <div id="chat">
       <div class="flex items-center justify-between mb-3 px-1">
-        <h2 class="font-mono text-xs uppercase tracking-[0.22em] text-fuchsia-300/80 flex items-center gap-2">
+        <h1 class="font-mono text-xs uppercase tracking-[0.22em] text-fuchsia-300/80 flex items-center gap-2">
           <span class="text-fuchsia-400">✦</span> Club Chat
-        </h2>
+        </h1>
         <div class="flex items-center gap-2">
           <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono text-emerald-300 bg-emerald-500/10 border border-emerald-500/25">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -478,7 +544,7 @@
         <div id="chatError" class="hidden mx-4 mt-4 px-4 py-2.5 rounded-2xl bg-rose-500/10 border border-rose-400/30 text-xs text-rose-200" role="alert"></div>
 
         <!-- Scrollable Messages Feed -->
-        <div id="chatMessages" class="h-80 sm:h-96 overflow-y-auto p-4 sm:p-5 space-y-4">
+        <div id="chatMessages" class="h-[26rem] sm:h-[32rem] overflow-y-auto p-4 sm:p-5 space-y-4">
           <div class="h-full flex items-center justify-center text-xs font-mono text-zinc-500">
             Loading club chat...
           </div>
@@ -535,8 +601,8 @@
           </div>
         </div>
       </div>
-    </section>
-  </main>
+    </div>
+  </section>
 
   <!-- DEDICATED SIGN UP / LOG IN PAGE VIEW (Hidden by default) -->
   <section id="signupPage" class="hidden max-w-lg mx-auto px-4 pt-8 pb-20">

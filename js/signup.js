@@ -1,9 +1,8 @@
 /**
  * ============================================================================
- * js/signup.js — SIGN UP, LOG IN & MEMBER PASS CONTROLLER
- * Connects to /api/signup and /api/login (MongoDB Atlas), saves the active
- * Member Pass in localStorage, and notifies other modules (like Club Chat)
- * whenever the auth state changes.
+ * js/signup.js — MEMBER SIGN UP, LOG IN, PASS CARD & PAGE NAVIGATION
+ * Handles /api/signup, /api/login, stacked badges, join percentile stats,
+ * localStorage persistence, and dedicated page switching via the top hotbar.
  * ============================================================================
  */
 import { SIGNUP_API_URL, LOGIN_API_URL, getMemberBadges } from "./config.js";
@@ -11,79 +10,53 @@ import { showToast } from "./ui.js";
 
 const STORAGE_KEY = "raveyns_club_member";
 const OG_PROMO_CUTOFF = new Date("2026-12-01T23:59:59-06:00");
+
 let currentMember = null;
 let totalRegisteredMembers = null;
 
 /**
- * Computes a member's join position and what percent of all other registered
- * users they joined after (e.g., #1 of 4 -> 0%, #4 of 4 -> 100%).
+ * Safely escapes HTML entities before rendering into innerHTML.
  */
-function computeJoinStats(memberId, totalUsers) {
-  const numericTotal = Number(totalUsers);
-  if (!Number.isFinite(numericTotal) || numericTotal <= 0) return null;
-
-  const match = String(memberId || "").trim().match(/^#RV-(\d+)$/i);
-  const rawRank = match ? parseInt(match[1], 10) : numericTotal;
-  const safeTotal = Math.max(numericTotal, rawRank);
-  const safeRank = Math.min(Math.max(rawRank, 1), safeTotal);
-  const joinedAfterPercent =
-    safeTotal <= 1 ? 0 : Math.round(((safeRank - 1) / (safeTotal - 1)) * 100);
-
-  return {
-    rank: safeRank,
-    total: safeTotal,
-    joinedAfterPercent,
-  };
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /**
- * Updates the total registered members counter and the logged-in user's
- * join percentile on both the homepage and the Digital Member Pass.
+ * Saves the active member pass to localStorage and shares it globally.
  */
-function updateClubStatsUI() {
-  const totalCountEl = document.getElementById("clubTotalMembersCount");
-  const percentileRow = document.getElementById("clubUserPercentileRow");
-  const joinedAfterText = document.getElementById("clubUserJoinedAfterText");
-  const percentileBar = document.getElementById("clubUserPercentileBar");
-  const passTotalEl = document.getElementById("memberPassTotalUsers");
-  const passJoinedAfterEl = document.getElementById("memberPassJoinedAfter");
-
-  const hasTotal = Number.isFinite(totalRegisteredMembers) && totalRegisteredMembers > 0;
-  const formattedTotal = hasTotal ? totalRegisteredMembers.toLocaleString() : "—";
-
-  if (totalCountEl) {
-    totalCountEl.textContent = hasTotal ? `${formattedTotal} registered` : "—";
-  }
-  if (passTotalEl) {
-    passTotalEl.textContent = formattedTotal;
-  }
-
-  if (currentMember && hasTotal) {
-    const stats = computeJoinStats(currentMember.memberId, totalRegisteredMembers);
-    if (stats) {
-      percentileRow?.classList.remove("hidden");
-      if (joinedAfterText) {
-        joinedAfterText.textContent = `${stats.joinedAfterPercent}% of users (#${stats.rank} of ${stats.total})`;
-      }
-      if (percentileBar) {
-        percentileBar.style.width = `${stats.joinedAfterPercent}%`;
-      }
-      if (passJoinedAfterEl) {
-        passJoinedAfterEl.textContent = `${stats.joinedAfterPercent}% of users`;
-      }
-      return;
+function saveMember(member) {
+  window.__raveynsCurrentMember = member || null;
+  try {
+    if (member) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(member));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
     }
-  }
-
-  percentileRow?.classList.add("hidden");
-  if (passJoinedAfterEl) {
-    passJoinedAfterEl.textContent = "—";
+  } catch (err) {
+    console.warn("Unable to persist member session:", err);
   }
 }
 
 /**
- * Loads the saved member pass from localStorage if valid, and automatically
- * upgrades legacy sessions that predate the stacked badges system.
+ * Clears the saved member pass from localStorage and global state.
+ */
+function clearSavedMember() {
+  window.__raveynsCurrentMember = null;
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore storage errors in private browsing
+  }
+}
+
+/**
+ * Loads the saved member pass from localStorage, automatically upgrading
+ * legacy sessions to the stacked badges format and stripping deprecated fields.
  */
 function loadSavedMember() {
   try {
@@ -96,59 +69,39 @@ function loadSavedMember() {
       return null;
     }
 
-    // Upgrade old browser sessions that don't have a badges array yet or still carry optInDrops
-    let sessionModified = false;
-    if ("optInDrops" in parsed) {
+    let upgraded = false;
+
+    // Strip deprecated optInDrops field if present on old sessions
+    if (Object.prototype.hasOwnProperty.call(parsed, "optInDrops")) {
       delete parsed.optInDrops;
-      sessionModified = true;
-    }
-    if (!Array.isArray(parsed.badges) || parsed.badges.length === 0) {
-      const seedBadges = new Date() <= OG_PROMO_CUTOFF ? ["og"] : [];
-      const resolved = getMemberBadges(
-        parsed.memberId,
-        seedBadges,
-        parsed.role,
-        parsed.handle
-      );
-      parsed.badges = resolved.map((b) => b.key);
-      parsed.role = parsed.badges[0] || "member";
-      sessionModified = true;
-    }
-    if (sessionModified) {
-      saveMember(parsed);
+      upgraded = true;
     }
 
+    // Upgrade old sessions missing the stacked badges array
+    if (!Array.isArray(parsed.badges) || parsed.badges.length === 0) {
+      const seedBadges = [];
+      if (parsed.role) seedBadges.push(parsed.role);
+      if (new Date() <= OG_PROMO_CUTOFF) seedBadges.push("og");
+      const resolved = getMemberBadges(parsed.memberId, seedBadges, parsed.role, parsed.handle);
+      parsed.badges = resolved.map((b) => b.key);
+      parsed.role = parsed.badges[0] || "member";
+      upgraded = true;
+    }
+
+    if (upgraded) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    }
+
+    window.__raveynsCurrentMember = parsed;
     return parsed;
-  } catch (err) {
-    console.warn("Unable to read saved member from localStorage:", err);
+  } catch {
+    clearSavedMember();
     return null;
   }
 }
 
 /**
- * Persists the active member pass in localStorage.
- */
-function saveMember(member) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(member));
-  } catch (err) {
-    console.warn("Unable to save member to localStorage:", err);
-  }
-}
-
-/**
- * Clears the active member pass from localStorage.
- */
-function clearSavedMember() {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch (err) {
-    console.warn("Unable to clear saved member from localStorage:", err);
-  }
-}
-
-/**
- * Displays or clears an inline error banner for signup or login.
+ * Shows or hides an inline error alert inside the Sign Up or Log In form.
  */
 function showAuthError(elementId, message = "") {
   const el = document.getElementById(elementId);
@@ -164,9 +117,10 @@ function showAuthError(elementId, message = "") {
 }
 
 /**
- * Switches between the Join Club and Log In form tabs inside #signupPage.
+ * Toggles between the "Join Club" (signup) and "Log In" (login) form tabs.
  */
 function setAuthMode(mode) {
+  const isLogin = mode === "login";
   const signupFormView = document.getElementById("signupFormView");
   const loginFormView = document.getElementById("loginFormView");
   const tabSignupBtn = document.getElementById("tabSignupBtn");
@@ -175,129 +129,215 @@ function setAuthMode(mode) {
   showAuthError("signupError", "");
   showAuthError("loginError", "");
 
-  const activeClasses = ["text-white", "bg-fuchsia-500/25", "border-fuchsia-400/40", "font-semibold"];
-  const inactiveClasses = ["text-zinc-400", "border-transparent", "font-medium"];
+  signupFormView?.classList.toggle("hidden", isLogin);
+  loginFormView?.classList.toggle("hidden", !isLogin);
 
-  if (mode === "login") {
-    signupFormView?.classList.add("hidden");
-    loginFormView?.classList.remove("hidden");
+  if (tabSignupBtn && tabLoginBtn) {
+    const activeClasses = ["text-white", "bg-fuchsia-500/25", "border-fuchsia-400/40", "font-semibold"];
+    const inactiveClasses = ["text-zinc-400", "border-transparent", "font-medium"];
 
-    tabLoginBtn?.classList.add(...activeClasses);
-    tabLoginBtn?.classList.remove(...inactiveClasses);
-    tabSignupBtn?.classList.remove(...activeClasses);
-    tabSignupBtn?.classList.add(...inactiveClasses);
-  } else {
-    loginFormView?.classList.add("hidden");
-    signupFormView?.classList.remove("hidden");
-
-    tabSignupBtn?.classList.add(...activeClasses);
-    tabSignupBtn?.classList.remove(...inactiveClasses);
-    tabLoginBtn?.classList.remove(...activeClasses);
-    tabLoginBtn?.classList.add(...inactiveClasses);
+    if (isLogin) {
+      tabLoginBtn.classList.add(...activeClasses);
+      tabLoginBtn.classList.remove(...inactiveClasses);
+      tabSignupBtn.classList.remove(...activeClasses);
+      tabSignupBtn.classList.add(...inactiveClasses);
+    } else {
+      tabSignupBtn.classList.add(...activeClasses);
+      tabSignupBtn.classList.remove(...inactiveClasses);
+      tabLoginBtn.classList.remove(...activeClasses);
+      tabLoginBtn.classList.add(...inactiveClasses);
+    }
   }
 }
 
 /**
- * Updates header buttons, Member Pass card, and notifies Club Chat.
+ * Parses the numeric join rank from a Member ID like "#RV-0004" -> 4.
+ */
+function parseMemberRank(memberId) {
+  const match = String(memberId || "").trim().match(/(\d+)$/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+/**
+ * Updates the total registered members count and the logged-in user's
+ * "Joined after X% of users" progress bar on both the Home Hero and Member Pass.
+ */
+function updateClubStatsUI() {
+  const totalEl = document.getElementById("clubTotalMembersCount");
+  const percentileRow = document.getElementById("clubUserPercentileRow");
+  const joinedAfterText = document.getElementById("clubUserJoinedAfterText");
+  const percentileBar = document.getElementById("clubUserPercentileBar");
+
+  const passTotalEl = document.getElementById("memberPassTotalUsers");
+  const passJoinedAfterEl = document.getElementById("memberPassJoinedAfter");
+
+  const rank = currentMember ? parseMemberRank(currentMember.memberId) : 0;
+  const knownTotal =
+    typeof totalRegisteredMembers === "number" && totalRegisteredMembers > 0
+      ? Math.max(totalRegisteredMembers, rank)
+      : rank > 0
+      ? rank
+      : null;
+
+  if (totalEl) {
+    totalEl.textContent = knownTotal !== null ? `${knownTotal.toLocaleString()} registered` : "—";
+  }
+  if (passTotalEl) {
+    passTotalEl.textContent = knownTotal !== null ? knownTotal.toLocaleString() : "—";
+  }
+
+  if (currentMember && rank > 0 && knownTotal !== null) {
+    // Compare against all other members: #1 of 4 => 0%, #4 of 4 => 100%
+    const pct =
+      knownTotal <= 1
+        ? 0
+        : Math.min(100, Math.max(0, Math.round(((rank - 1) / (knownTotal - 1)) * 100)));
+
+    percentileRow?.classList.remove("hidden");
+    if (joinedAfterText) {
+      joinedAfterText.textContent = `${pct}% of users (#${rank} of ${knownTotal})`;
+    }
+    if (percentileBar) {
+      percentileBar.style.width = `${pct}%`;
+    }
+    if (passJoinedAfterEl) {
+      passJoinedAfterEl.textContent = `${pct}% of users`;
+    }
+  } else {
+    percentileRow?.classList.add("hidden");
+    if (passJoinedAfterEl) {
+      passJoinedAfterEl.textContent = "—";
+    }
+  }
+}
+
+/**
+ * Syncs the header buttons, OG promo banner, Member Pass card, Club Chat bar,
+ * and broadcasts auth changes to other modules (chat.js, vault.js).
  */
 function updateMemberUI() {
+  window.__raveynsCurrentMember = currentMember || null;
+
   const navLoginBtn = document.getElementById("navLoginBtn");
   const navSignupLabel = document.getElementById("navSignupLabel");
+  const ogPromoBanner = document.getElementById("ogPromoBanner");
+
   const authTabs = document.getElementById("authTabs");
   const signupFormView = document.getElementById("signupFormView");
   const loginFormView = document.getElementById("loginFormView");
   const memberPassView = document.getElementById("memberPassView");
+
   const chatForm = document.getElementById("chatForm");
   const chatLockedPrompt = document.getElementById("chatLockedPrompt");
   const chatActiveUser = document.getElementById("chatActiveUser");
-  const ogPromoBanner = document.getElementById("ogPromoBanner");
 
-  if (ogPromoBanner) {
-    const isPromoActive = new Date() <= OG_PROMO_CUTOFF;
-    ogPromoBanner.classList.toggle("hidden", Boolean(currentMember) || !isPromoActive);
-  }
+  const isPromoActive = new Date() <= OG_PROMO_CUTOFF;
 
   if (currentMember) {
     navLoginBtn?.classList.add("hidden");
     if (navSignupLabel) navSignupLabel.textContent = "Member Pass";
+    ogPromoBanner?.classList.add("hidden");
 
+    // Show Digital Member Pass inside #signupPage
     authTabs?.classList.add("hidden");
     signupFormView?.classList.add("hidden");
     loginFormView?.classList.add("hidden");
     memberPassView?.classList.remove("hidden");
 
-    // Hide chat login/signup buttons and unlock the chat composer
-    chatLockedPrompt?.classList.add("hidden");
-    chatForm?.classList.remove("hidden");
-    if (chatActiveUser) {
-      const idSuffix = currentMember.memberId ? ` (${currentMember.memberId})` : "";
-      chatActiveUser.textContent = `Posting as ${currentMember.handle}${idSuffix}`;
-    }
+    const passIdEl = document.getElementById("memberPassId");
+    const passHandleEl = document.getElementById("memberPassHandle");
+    const passEmailEl = document.getElementById("memberPassEmail");
+    const passBadgesEl = document.getElementById("memberPassBadges");
 
-    const idEl = document.getElementById("memberPassId");
-    const badgesEl = document.getElementById("memberPassBadges");
-    const handleEl = document.getElementById("memberPassHandle");
-    const emailEl = document.getElementById("memberPassEmail");
+    if (passIdEl) passIdEl.textContent = currentMember.memberId || "#RV-0001";
+    if (passHandleEl) passHandleEl.textContent = currentMember.handle || "@member";
+    if (passEmailEl) passEmailEl.textContent = currentMember.email || "";
 
-    if (idEl) idEl.textContent = currentMember.memberId || "#RV-0001";
-    if (badgesEl) {
+    if (passBadgesEl) {
       const badges = getMemberBadges(
         currentMember.memberId,
         currentMember.badges,
         currentMember.role,
         currentMember.handle
       );
-      badgesEl.innerHTML = "";
-      badges.forEach((badge) => {
-        const pill = document.createElement("span");
-        pill.textContent = badge.label;
-        pill.className = `px-2 py-0.5 rounded-md text-[10px] font-mono uppercase tracking-wider border ${badge.badgeClass}`;
-        badgesEl.appendChild(pill);
-      });
+      passBadgesEl.innerHTML = badges
+        .map(
+          (b) =>
+            `<span class="px-2 py-0.5 rounded-md text-[10px] font-mono uppercase tracking-wider border ${b.badgeClass}">${escapeHtml(b.label)}</span>`
+        )
+        .join("");
     }
-    if (handleEl) handleEl.textContent = currentMember.handle;
-    if (emailEl) emailEl.textContent = currentMember.email;
+
+    // Immediately unlock Club Chat composer & hide Log In / Join Club buttons
+    chatForm?.classList.remove("hidden");
+    chatLockedPrompt?.classList.add("hidden");
+    if (chatActiveUser) {
+      const idSuffix = currentMember.memberId ? ` (${currentMember.memberId})` : "";
+      chatActiveUser.textContent = `Posting as ${currentMember.handle}${idSuffix}`;
+    }
   } else {
     navLoginBtn?.classList.remove("hidden");
     if (navSignupLabel) navSignupLabel.textContent = "Join Club";
+    ogPromoBanner?.classList.toggle("hidden", !isPromoActive);
 
+    // Show Auth Tabs + Form inside #signupPage
     authTabs?.classList.remove("hidden");
     memberPassView?.classList.add("hidden");
 
-    // Show chat login/signup buttons and hide the chat composer
+    // Show Log In / Join Club prompt in Club Chat
     chatForm?.classList.add("hidden");
     chatLockedPrompt?.classList.remove("hidden");
   }
 
-  // Notify other modules (like js/chat.js) that auth state changed
-  window.__raveynsCurrentMember = currentMember;
+  updateClubStatsUI();
+
   window.dispatchEvent(
     new CustomEvent("raveyns:auth-changed", { detail: { member: currentMember } })
   );
-
-  updateClubStatsUI();
 }
 
 /**
- * Switches between the main Artist Hub and the Sign Up / Log In / Member Pass view.
+ * Switches between dedicated pages: Home ("hub"), Socials ("socials"),
+ * Club Vault ("vault"), Club Chat ("chat"), and Sign Up / Log In ("signup"/"login").
  */
 function showView(view) {
-  const hubMain = document.getElementById("top");
-  const signupPage = document.getElementById("signupPage");
-  if (!hubMain || !signupPage) return;
+  const pages = {
+    hub: document.getElementById("top"),
+    socials: document.getElementById("socialsPage"),
+    vault: document.getElementById("vaultPage"),
+    chat: document.getElementById("chatPage"),
+    signup: document.getElementById("signupPage"),
+  };
+
+  const targetKey = view === "login" ? "signup" : pages[view] ? view : "hub";
+
+  Object.entries(pages).forEach(([key, el]) => {
+    if (!el) return;
+    el.classList.toggle("hidden", key !== targetKey);
+  });
+
+  // Highlight active tab in the top hotbar (desktop & mobile)
+  document.querySelectorAll("[data-nav-view]").forEach((link) => {
+    const isActive = link.getAttribute("data-nav-view") === targetKey;
+    link.classList.toggle("text-white", isActive);
+    link.classList.toggle("bg-fuchsia-500/20", isActive);
+    link.classList.toggle("border-fuchsia-400/40", isActive);
+    link.classList.toggle("shadow-neon-purple", isActive);
+    link.classList.toggle("border-transparent", !isActive);
+    link.classList.toggle("text-zinc-400", !isActive);
+  });
 
   if (view === "signup" || view === "login") {
-    hubMain.classList.add("hidden");
-    signupPage.classList.remove("hidden");
     updateMemberUI();
     if (!currentMember) {
       setAuthMode(view);
     }
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  } else {
-    signupPage.classList.add("hidden");
-    hubMain.classList.remove("hidden");
   }
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.dispatchEvent(
+    new CustomEvent("raveyns:view-changed", { detail: { view: targetKey } })
+  );
 }
 
 /**
@@ -523,21 +563,30 @@ export function initSignup() {
 
   const goHome = (e) => {
     if (e) e.preventDefault();
-    if (window.location.hash === "#signup" || window.location.hash === "#login") {
+    if (window.location.hash) {
       history.pushState("", document.title, window.location.pathname + window.location.search);
     }
     showView("hub");
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   document.getElementById("brandHomeLink")?.addEventListener("click", goHome);
   document.getElementById("backToHubBtn")?.addEventListener("click", goHome);
   document.getElementById("passBackBtn")?.addEventListener("click", goHome);
+  document.querySelectorAll("[data-back-home]").forEach((btn) => {
+    btn.addEventListener("click", goHome);
+  });
 
-  // Clicking top nav anchor links (Socials, Uploads, Chat) returns to hub first
-  document.querySelectorAll("[data-hub-link]").forEach((link) => {
-    link.addEventListener("click", () => {
-      showView("hub");
+  // Top & mobile hotbar page switcher links
+  document.querySelectorAll("[data-nav-view]").forEach((link) => {
+    link.addEventListener("click", (e) => {
+      const targetView = link.getAttribute("data-nav-view") || "hub";
+      if (targetView === "hub") {
+        goHome(e);
+      } else {
+        e.preventDefault();
+        window.location.hash = `#${targetView}`;
+        showView(targetView);
+      }
     });
   });
 
@@ -573,12 +622,11 @@ export function initSignup() {
   document.getElementById("signupForm")?.addEventListener("submit", handleSignupSubmit);
   document.getElementById("loginForm")?.addEventListener("submit", handleLoginSubmit);
 
-  // Support direct links to /#signup, /#login, and browser Back button
+  // Support direct links to #socials, #vault, #chat, #signup, #login, and browser Back button
   const syncRouteFromHash = () => {
-    if (window.location.hash === "#signup") {
-      showView("signup");
-    } else if (window.location.hash === "#login") {
-      showView("login");
+    const hash = window.location.hash.replace(/^#/, "").toLowerCase();
+    if (hash === "signup" || hash === "login" || hash === "socials" || hash === "vault" || hash === "chat") {
+      showView(hash);
     } else {
       showView("hub");
     }
