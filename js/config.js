@@ -16,6 +16,80 @@ export const LOGIN_API_URL = "/api/login";
 export const CHAT_API_URL = "/api/chat";
 
 /**
+ * MEMBER ID ROLES & BADGE STYLES
+ * Assign custom roles to specific Member IDs in MEMBER_ID_ROLES below.
+ */
+export const MEMBER_ROLES = {
+  artist: {
+    label: "ARTIST ✦",
+    badgeClass: "bg-pink-500/20 text-pink-200 border-pink-400/40",
+  },
+  admin: {
+    label: "ADMIN",
+    badgeClass: "bg-rose-500/20 text-rose-200 border-rose-400/40",
+  },
+  mod: {
+    label: "MOD",
+    badgeClass: "bg-cyan-500/20 text-cyan-200 border-cyan-400/40",
+  },
+  vip: {
+    label: "VIP ✦",
+    badgeClass: "bg-amber-500/20 text-amber-200 border-amber-400/40",
+  },
+  og: {
+    label: "OG",
+    badgeClass: "bg-purple-500/20 text-purple-200 border-purple-400/40",
+  },
+  member: {
+    label: "MEMBER",
+    badgeClass: "bg-white/[0.06] text-zinc-300 border-white/15",
+  },
+};
+
+/**
+ * Map specific Member IDs to roles here (overrides default role).
+ * Example: "#RV-0002": "mod", "#RV-0003": "vip"
+ */
+export const MEMBER_ID_ROLES = {
+  "#RV-0001": "artist",
+};
+
+/**
+ * Resolves a member's role from MEMBER_ID_ROLES, their database role,
+ * or automatic Member ID tier (#RV-0002 to #RV-0025 = OG, #RV-0026+ = Member).
+ */
+export function getMemberRole(memberId = "", dbRole = "", handle = "") {
+  const normalizedId = String(memberId || "").trim().toUpperCase();
+  const normalizedHandle = String(handle || "").trim().toLowerCase();
+  const normalizedDbRole = String(dbRole || "").trim().toLowerCase();
+
+  let roleKey = MEMBER_ID_ROLES[normalizedId];
+
+  if (!roleKey && (normalizedHandle === "@raveyn" || normalizedHandle === "@itsraveyn")) {
+    roleKey = "artist";
+  }
+
+  if (!roleKey && normalizedDbRole && MEMBER_ROLES[normalizedDbRole]) {
+    roleKey = normalizedDbRole;
+  }
+
+  if (!roleKey) {
+    const numMatch = normalizedId.match(/^#RV-(\d+)$/);
+    const passNumber = numMatch ? parseInt(numMatch[1], 10) : 0;
+    if (passNumber === 1) {
+      roleKey = "artist";
+    } else if (passNumber >= 2 && passNumber <= 25) {
+      roleKey = "og";
+    } else {
+      roleKey = "member";
+    }
+  }
+
+  const roleConfig = MEMBER_ROLES[roleKey] || MEMBER_ROLES.member;
+  return { key: roleKey, ...roleConfig };
+}
+
+/**
  * STREAMING PLATFORMS & SOCIAL CHANNELS
  */
 export const ARTIST_CONFIG = {

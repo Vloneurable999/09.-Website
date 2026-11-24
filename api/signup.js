@@ -23,7 +23,10 @@ async function getDatabase() {
 
   if (!globalThis._mongoClientPromise) {
     const client = new MongoClient(MONGODB_URI);
-    globalThis._mongoClientPromise = client.connect();
+    globalThis._mongoClientPromise = client.connect().catch((err) => {
+      globalThis._mongoClientPromise = null;
+      throw err;
+    });
   }
 
   const client = await globalThis._mongoClientPromise;
@@ -47,7 +50,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { handle, email, password, optInDrops } = req.body || {};
+    const body =
+      typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+    const { handle, email, password, optInDrops } = body;
 
     const cleanHandle = String(handle || "").trim();
     const cleanEmail = String(email || "").trim().toLowerCase();
@@ -65,16 +70,17 @@ export default async function handler(req, res) {
     }
 
     const formattedHandle = cleanHandle.startsWith("@") ? cleanHandle : `@${cleanHandle}`;
+    const rawUsername = formattedHandle.slice(1);
 
     const db = await getDatabase();
     const members = db.collection("members");
 
-    // Prevent duplicate signups with the same email or username (case-insensitive)
-    const escapedHandle = formattedHandle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Prevent duplicate signups with the same email or username (case-insensitive, with or without @)
+    const escapedUsername = rawUsername.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const existingMember = await members.findOne({
       $or: [
         { email: cleanEmail },
-        { handle: { $regex: `^${escapedHandle}$`, $options: "i" } },
+        { handle: { $regex: `^@?${escapedUsername}$`, $options: "i" } },
       ],
     });
     if (existingMember) {
@@ -87,10 +93,21 @@ export default async function handler(req, res) {
 
     // Generate sequential club pass number (e.g., #RV-0001, #RV-0002)
     const memberCount = await members.countDocuments();
-    const memberId = `#RV-${String(memberCount + 1).padStart(4, "0")}`;
+    const passNumber = memberCount + 1;
+    const memberId = `#RV-${String(passNumber).padStart(4, "0")}`;
+
+    // Assign default role based on handle or Member ID number
+    const lowerHandle = formattedHandle.toLowerCase();
+    let defaultRole = "member";
+    if (passNumber === 1 || lowerHandle === "@raveyn" || lowerHandle === "@itsraveyn") {
+      defaultRole = "artist";
+    } else if (passNumber <= 25) {
+      defaultRole = "og";
+    }
 
     const newMember = {
       memberId,
+      role: defaultRole,
       handle: formattedHandle,
       email: cleanEmail,
       passwordHash: hashPassword(cleanPassword),
@@ -104,6 +121,7 @@ export default async function handler(req, res) {
     return res.status(201).json({
       member: {
         memberId: newMember.memberId,
+        role: newMember.role,
         handle: newMember.handle,
         email: newMember.email,
         optInDrops: newMember.optInDrops,

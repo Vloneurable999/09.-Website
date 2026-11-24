@@ -21,7 +21,10 @@ async function getDatabase() {
 
   if (!globalThis._mongoClientPromise) {
     const client = new MongoClient(MONGODB_URI);
-    globalThis._mongoClientPromise = client.connect();
+    globalThis._mongoClientPromise = client.connect().catch((err) => {
+      globalThis._mongoClientPromise = null;
+      throw err;
+    });
   }
 
   const client = await globalThis._mongoClientPromise;
@@ -55,7 +58,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { identifier, email, handle, password } = req.body || {};
+    const body =
+      typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+    const { identifier, email, handle, password } = body;
 
     const rawIdentifier = String(identifier || email || handle || "").trim();
     const cleanPassword = String(password || "");
@@ -77,10 +82,8 @@ export default async function handler(req, res) {
     if (isEmail) {
       query = { email: rawIdentifier.toLowerCase() };
     } else {
-      const normalizedHandle = rawIdentifier.startsWith("@")
-        ? rawIdentifier
-        : `@${rawIdentifier}`;
-      query = { handle: { $regex: `^${escapeRegex(normalizedHandle)}$`, $options: "i" } };
+      const strippedHandle = rawIdentifier.replace(/^@+/, "");
+      query = { handle: { $regex: `^@?${escapeRegex(strippedHandle)}$`, $options: "i" } };
     }
 
     const member = await members.findOne(query);
@@ -92,6 +95,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       member: {
         memberId: member.memberId,
+        role: member.role || "member",
         handle: member.handle,
         email: member.email,
         optInDrops: Boolean(member.optInDrops),

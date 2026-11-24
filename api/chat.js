@@ -47,9 +47,23 @@ export default async function handler(req, res) {
         .limit(FETCH_LIMIT)
         .toArray();
 
+      // Look up live roles from the members collection by memberId
+      const uniqueMemberIds = [...new Set(docs.map((d) => d.memberId).filter(Boolean))];
+      const memberRolesMap = new Map();
+      if (uniqueMemberIds.length > 0) {
+        const memberDocs = await db
+          .collection("members")
+          .find({ memberId: { $in: uniqueMemberIds } }, { projection: { memberId: 1, role: 1 } })
+          .toArray();
+        memberDocs.forEach((m) => {
+          if (m.memberId && m.role) memberRolesMap.set(m.memberId, m.role);
+        });
+      }
+
       const messages = docs.reverse().map((doc) => ({
         id: doc._id.toString(),
         memberId: doc.memberId,
+        role: memberRolesMap.get(doc.memberId) || doc.role || "member",
         handle: doc.handle,
         text: doc.text,
         createdAt: doc.createdAt,
@@ -98,6 +112,7 @@ export default async function handler(req, res) {
 
       const newMessage = {
         memberId: member.memberId,
+        role: member.role || "member",
         handle: member.handle,
         text: cleanText,
         createdAt: new Date(),
@@ -109,6 +124,7 @@ export default async function handler(req, res) {
         message: {
           id: insertResult.insertedId.toString(),
           memberId: newMessage.memberId,
+          role: newMessage.role,
           handle: newMessage.handle,
           text: newMessage.text,
           createdAt: newMessage.createdAt,
