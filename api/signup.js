@@ -92,6 +92,12 @@ export default async function handler(req, res) {
           : "That username is already taken. Please choose another.";
       return res.status(409).json({ error: conflictMsg });
     }
+
+    // Generate sequential club member ID (e.g., #RV-0001, #RV-0002)
+    const memberCount = await members.countDocuments();
+    const passNumber = memberCount + 1;
+    const memberId = `#RV-${String(passNumber).padStart(4, "0")}`;
+
     // Collect and stack starting badges (Artist for raveyn, OG for signups through Dec 1st)
     const now = new Date();
     const lowerHandle = formattedHandle.toLowerCase();
