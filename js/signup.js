@@ -160,16 +160,16 @@ function parseMemberRank(memberId) {
 
 /**
  * Updates the total registered members count and the logged-in user's
- * "Joined after X% of users" progress bar on both the Home Hero and Member Pass.
+ * "Joined before X% of users" progress bar on both the Home Hero and Member Pass.
  */
 function updateClubStatsUI() {
   const totalEl = document.getElementById("clubTotalMembersCount");
   const percentileRow = document.getElementById("clubUserPercentileRow");
-  const joinedAfterText = document.getElementById("clubUserJoinedAfterText");
+  const joinedBeforeText = document.getElementById("clubUserJoinedBeforeText");
   const percentileBar = document.getElementById("clubUserPercentileBar");
 
   const passTotalEl = document.getElementById("memberPassTotalUsers");
-  const passJoinedAfterEl = document.getElementById("memberPassJoinedAfter");
+  const passJoinedBeforeEl = document.getElementById("memberPassJoinedBefore");
 
   const rank = currentMember ? parseMemberRank(currentMember.memberId) : 0;
   const knownTotal =
@@ -187,26 +187,26 @@ function updateClubStatsUI() {
   }
 
   if (currentMember && rank > 0 && knownTotal !== null) {
-    // Compare against all other members: #1 of 4 => 0%, #4 of 4 => 100%
+    // Compare against all other users: #1 of 4 => 100%, #4 of 4 => 0%
     const pct =
       knownTotal <= 1
-        ? 0
-        : Math.min(100, Math.max(0, Math.round(((rank - 1) / (knownTotal - 1)) * 100)));
+        ? 100
+        : Math.min(100, Math.max(0, Math.round(((knownTotal - rank) / (knownTotal - 1)) * 100)));
 
     percentileRow?.classList.remove("hidden");
-    if (joinedAfterText) {
-      joinedAfterText.textContent = `${pct}% of users (#${rank} of ${knownTotal})`;
+    if (joinedBeforeText) {
+      joinedBeforeText.textContent = `${pct}% of users (#${rank} of ${knownTotal})`;
     }
     if (percentileBar) {
       percentileBar.style.width = `${pct}%`;
     }
-    if (passJoinedAfterEl) {
-      passJoinedAfterEl.textContent = `${pct}% of users`;
+    if (passJoinedBeforeEl) {
+      passJoinedBeforeEl.textContent = `${pct}% of users`;
     }
   } else {
     percentileRow?.classList.add("hidden");
-    if (passJoinedAfterEl) {
-      passJoinedAfterEl.textContent = "—";
+    if (passJoinedBeforeEl) {
+      passJoinedBeforeEl.textContent = "—";
     }
   }
 }
