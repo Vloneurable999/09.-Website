@@ -52,6 +52,12 @@ function detectChatSpam(text) {
   return null;
 }
 
+/**
+ * Resolves all collected badges for a member document.
+ */
+function resolveMemberBadges(member) {
+  const badgeSet = new Set();
+
   if (member.role) {
     badgeSet.add(String(member.role).trim().toLowerCase());
   }
@@ -170,6 +176,45 @@ async function migrateLegacyData(db) {
 }
 
 /**
+ * Resolves all collected badges for a member document.
+ */
+function resolveMemberBadges(member) {
+  const badgeSet = new Set();
+
+  if (member.role) {
+    badgeSet.add(String(member.role).trim().toLowerCase());
+  }
+
+  const normalizedId = String(member.memberId || "").trim().toUpperCase();
+  const lowerHandle = String(member.handle || "").trim().toLowerCase();
+  if (
+    normalizedId === "#RV-0001" ||
+    lowerHandle === "@raveyn" ||
+    lowerHandle === "@itsraveyn"
+  ) {
+    badgeSet.add("artist");
+  }
+
+  const createdDate = member.createdAt ? new Date(member.createdAt) : null;
+  if (!createdDate || Number.isNaN(createdDate.getTime()) || createdDate <= OG_PROMO_CUTOFF) {
+    badgeSet.add("og");
+  }
+
+  if (badgeSet.size > 1 && badgeSet.has("member")) {
+    badgeSet.delete("member");
+  }
+  if (badgeSet.size === 0) {
+    badgeSet.add("member");
+  }
+
+  return [...badgeSet].sort((a, b) => {
+    const idxA = BADGE_PRIORITY.indexOf(a);
+    const idxB = BADGE_PRIORITY.indexOf(b);
+    return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+  });
+}
+
+/**
  * Reuse the MongoDB connection across warm Vercel serverless invocations.
  */
 async function getDatabase() {
@@ -192,11 +237,6 @@ async function getDatabase() {
 export default async function handler(req, res) {
   try {
     const db = await getDatabase();
-    try {
-      await migrateLegacyData(db);
-    } catch (migrationError) {
-      console.error("Legacy badge migration skipped:", migrationError);
-    }
     const chatCollection = db.collection("chat_messages");
 
     // ------------------------------------------------------------------------
@@ -213,22 +253,26 @@ export default async function handler(req, res) {
       const uniqueMemberIds = [...new Set(docs.map((d) => d.memberId).filter(Boolean))];
       const memberMetaMap = new Map();
       if (uniqueMemberIds.length > 0) {
-        const memberDocs = await db
-          .collection("members")
-          .find(
-            { memberId: { $in: uniqueMemberIds } },
-            { projection: { memberId: 1, handle: 1, role: 1, badges: 1, createdAt: 1 } }
-          )
-          .toArray();
-        memberDocs.forEach((m) => {
-          if (m.memberId) {
-            const resolvedBadges = resolveMemberBadges(m);
-            memberMetaMap.set(m.memberId, {
-              role: resolvedBadges[0],
-              badges: resolvedBadges,
-            });
-          }
-        });
+        try {
+          const memberDocs = await db
+            .collection("members")
+            .find(
+              { memberId: { $in: uniqueMemberIds } },
+              { projection: { memberId: 1, handle: 1, role: 1, badges: 1, createdAt: 1 } }
+            )
+            .toArray();
+          memberDocs.forEach((m) => {
+            if (m.memberId) {
+              const resolvedBadges = resolveMemberBadges(m);
+              memberMetaMap.set(m.memberId, {
+                role: resolvedBadges[0],
+                badges: resolvedBadges,
+              });
+            }
+          });
+        } catch (lookupErr) {
+          console.warn("Member metadata lookup warning:", lookupErr);
+        }
       }
 
       const messages = docs.reverse().map((doc) => {
@@ -245,7 +289,12 @@ export default async function handler(req, res) {
         };
       });
 
-      const totalMembers = await db.collection("members").countDocuments();
+      let totalMembers = 1;
+      try {
+        totalMembers = await db.collection("members").countDocuments();
+      } catch {
+        // Fallback count
+      }
 
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ messages, totalMembers });
@@ -327,7 +376,6 @@ export default async function handler(req, res) {
             { _id: target._id },
             { $set: { chatBanned: nextBannedState } }
           );
-          // Also remove recent spam messages from the muted user
           if (nextBannedState) {
             await chatCollection.deleteMany({ memberId: targetId });
           }
@@ -409,14 +457,6 @@ export default async function handler(req, res) {
 
       const memberBadges = resolveMemberBadges(member);
 
-      // Persist upgraded badges onto old member documents if missing
-      if (!Array.isArray(member.badges) || member.badges.length === 0) {
-        await membersCollection.updateOne(
-          { _id: member._id },
-          { $set: { badges: memberBadges, role: memberBadges[0] } }
-        );
-      }
-
       const newMessage = {
         memberId: member.memberId,
         role: memberBadges[0],
@@ -445,8 +485,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed." });
   } catch (error) {
     console.error("MongoDB Club Chat Error:", error);
+    const errMessage = error instanceof Error ? error.message : "Server error loading club chat.";
     return res.status(500).json({
-      error: "Server error loading club chat. Please try again.",
+      error: errMessage,
     });
   }
 }
