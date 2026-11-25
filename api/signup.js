@@ -28,6 +28,14 @@ function getClientIpHash(req) {
   return crypto.createHash("sha256").update(rawIp).digest("hex").slice(0, 24);
 }
 
+/**
+ * Reuse the MongoDB connection across warm Vercel serverless invocations.
+ */
+async function getDatabase() {
+  if (!MONGODB_URI) {
+    throw new Error("MONGODB_URI environment variable is not set in Vercel.");
+  }
+
   if (!globalThis._mongoClientPromise) {
     const client = new MongoClient(MONGODB_URI);
     globalThis._mongoClientPromise = client.connect().catch((err) => {
