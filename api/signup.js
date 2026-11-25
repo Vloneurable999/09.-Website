@@ -13,15 +13,20 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || "raveyns_club";
 // Anyone who signs up on or before Dec 1, 2026 (11:59:59 PM CST) gets the OG badge
 const OG_PROMO_CUTOFF = new Date("2026-12-01T23:59:59-06:00");
+const SIGNUP_WINDOW_MS = 60 * 60 * 1000; // 1 hour window
+const MAX_SIGNUPS_PER_IP = 5; // Max 5 accounts created per IP per hour
+const RESERVED_HANDLES = new Set(["admin", "moderator", "mod", "staff", "support", "system", "official"]);
 
 /**
- * Reuse the MongoDB connection across warm Vercel serverless invocations
- * to stay well within MongoDB Atlas free-tier connection limits.
+ * Extracts client IP hash so we can rate-limit bot signups without storing raw IPs.
  */
-async function getDatabase() {
-  if (!MONGODB_URI) {
-    throw new Error("MONGODB_URI environment variable is not set in Vercel.");
-  }
+function getClientIpHash(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  const rawIp = Array.isArray(forwarded)
+    ? forwarded[0]
+    : String(forwarded || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
+  return crypto.createHash("sha256").update(rawIp).digest("hex").slice(0, 24);
+}
 
   if (!globalThis._mongoClientPromise) {
     const client = new MongoClient(MONGODB_URI);
@@ -72,9 +77,36 @@ export default async function handler(req, res) {
     if (!rawUsername) {
       return res.status(400).json({ error: "Please enter a valid username." });
     }
+    if (!/^[a-zA-Z0-9._]{2,24}$/.test(rawUsername)) {
+      return res.status(400).json({
+        error: "Username must be 2–24 characters (letters, numbers, dots, or underscores).",
+      });
+    }
+    if (RESERVED_HANDLES.has(rawUsername.toLowerCase())) {
+      return res.status(400).json({
+        error: "That username is reserved. Please choose another.",
+      });
+    }
+    if (cleanPassword.length > 128) {
+      return res.status(400).json({ error: "Password must be 128 characters or less." });
+    }
 
     const db = await getDatabase();
     const members = db.collection("members");
+    const securityLogs = db.collection("security_events");
+
+    // Rate limit signup spam per IP address
+    const ipHash = getClientIpHash(req);
+    const recentSignups = await securityLogs.countDocuments({
+      type: "signup",
+      ipHash,
+      createdAt: { $gte: new Date(Date.now() - SIGNUP_WINDOW_MS) },
+    });
+    if (recentSignups >= MAX_SIGNUPS_PER_IP) {
+      return res.status(429).json({
+        error: "Too many accounts created recently. Please try again later.",
+      });
+    }
 
     // Prevent duplicate signups with the same username (case-insensitive, with or without @)
     const escapedUsername = rawUsername.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -116,6 +148,12 @@ export default async function handler(req, res) {
     };
 
     await members.insertOne(newMember);
+    await securityLogs.insertOne({
+      type: "signup",
+      ipHash,
+      memberId,
+      createdAt: now,
+    });
 
     // Return safe member data (never return passwordHash)
     return res.status(201).json({

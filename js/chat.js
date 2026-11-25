@@ -11,24 +11,32 @@ import { showToast } from "./ui.js";
 const CHAT_API_URL = config.CHAT_API_URL || "/api/chat";
 const STORAGE_KEY = "raveyns_club_member";
 const POLL_INTERVAL_MS = 4500;
+const CLIENT_COOLDOWN_MS = 3000;
 const ARTIST_HANDLES = new Set(["@raveyn", "@itsraveyn"]);
 
 let pollTimer = null;
 let lastRenderedKey = "";
 let isSending = false;
+let lastSentAt = 0;
+let lastSentText = "";
 let cachedMember = null;
 let chatInitialized = false;
 
 /**
- * Safely escapes HTML entities to prevent XSS in chat messages.
+ * Checks if the logged-in member has Artist, Admin, or Mod privileges.
  */
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+function isStaffMember(member) {
+  if (!member) return false;
+  if (typeof config.getMemberBadges === "function") {
+    const badges = config.getMemberBadges(
+      member.memberId,
+      member.badges,
+      member.role,
+      member.handle
+    );
+    return badges.some((b) => b.key === "artist" || b.key === "admin" || b.key === "mod");
+  }
+  return ARTIST_HANDLES.has(String(member.handle || "").toLowerCase());
 }
 
 /**
@@ -131,8 +139,10 @@ function renderMessages(messages, forceScroll = false) {
   if (!container) return;
 
   const member = getCurrentMember();
+  const canModerate = isStaffMember(member);
   const renderKey = JSON.stringify({
     me: member?.memberId || member?.handle || "",
+    mod: canModerate,
     items: messages.map((m) => `${m.id}:${m.role || ""}:${(m.badges || []).join(",")}`),
   });
 
@@ -189,6 +199,33 @@ function renderMessages(messages, forceScroll = false) {
         )
         .join("");
 
+      const targetIsStaff = badges.some(
+        (b) => b.key === "artist" || b.key === "admin" || b.key === "mod"
+      );
+      const modActionsHtml = canModerate
+        ? `
+          <span class="inline-flex items-center gap-1 ml-1">
+            <button
+              type="button"
+              data-chat-delete="${escapeHtml(msg.id)}"
+              class="px-1.5 py-0.5 rounded text-[9px] font-mono text-zinc-400 hover:text-rose-300 bg-white/[0.04] border border-white/10 hover:border-rose-400/40 cursor-pointer"
+              title="Delete message"
+            >Del</button>
+            ${
+              !isMine && !targetIsStaff && msg.memberId
+                ? `<button
+                    type="button"
+                    data-chat-mute="${escapeHtml(msg.memberId)}"
+                    data-chat-mute-handle="${safeHandle}"
+                    class="px-1.5 py-0.5 rounded text-[9px] font-mono text-zinc-400 hover:text-amber-300 bg-white/[0.04] border border-white/10 hover:border-amber-400/40 cursor-pointer"
+                    title="Mute user and clear their messages"
+                  >Mute</button>`
+                : ""
+            }
+          </span>
+        `
+        : "";
+
       return `
         <div class="flex flex-col ${isMine ? "items-end" : "items-start"}">
           <div class="flex items-center gap-1.5 mb-1 px-1 flex-wrap ${isMine ? "justify-end" : "justify-start"}">
@@ -196,6 +233,7 @@ function renderMessages(messages, forceScroll = false) {
             ${stackedBadgesHtml}
             <span class="font-mono text-[10px] text-zinc-500">${safeId}</span>
             <span class="font-mono text-[10px] text-zinc-600">· ${timeLabel}</span>
+            ${modActionsHtml}
           </div>
           <div class="max-w-[85%] sm:max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words whitespace-pre-wrap ${
             isMine
@@ -293,6 +331,28 @@ async function handleChatSubmit(event) {
     return;
   }
 
+  // Client-side instant spam & cooldown guard (staff bypass)
+  if (!isStaffMember(member)) {
+    const now = Date.now();
+    if (now - lastSentAt < CLIENT_COOLDOWN_MS) {
+      const waitSec = Math.ceil((CLIENT_COOLDOWN_MS - (now - lastSentAt)) / 1000);
+      setChatError(`Slow down! Wait ${waitSec}s before sending another message.`);
+      return;
+    }
+    if (text.toLowerCase() === lastSentText && now - lastSentAt < 60 * 1000) {
+      setChatError("Duplicate message blocked. Say something new!");
+      return;
+    }
+    if (/(https?:\/\/|www\.|[a-z0-9-]+\.(com|net|org|io|gg|xyz|co|me|tk|link|click)\b)/i.test(text)) {
+      setChatError("External links are blocked in Club Chat to keep members safe.");
+      return;
+    }
+    if (/(.)\1{11,}/u.test(text)) {
+      setChatError("Please avoid spamming repeated characters.");
+      return;
+    }
+  }
+
   setChatError("");
   isSending = true;
 
@@ -331,6 +391,8 @@ async function handleChatSubmit(event) {
     }
 
     input.value = "";
+    lastSentAt = Date.now();
+    lastSentText = text.toLowerCase();
     if (charCount) charCount.textContent = "0 / 400";
     await fetchMessages({ silent: true, forceScroll: true });
   } catch (error) {
@@ -341,6 +403,47 @@ async function handleChatSubmit(event) {
       sendBtn.disabled = false;
       sendBtn.textContent = originalBtnText;
     }
+  }
+}
+
+/**
+ * Handles staff moderation clicks (Delete message or Mute spammer).
+ */
+async function handleModAction(action, payload) {
+  const member = getCurrentMember();
+  if (!member || !isStaffMember(member)) return;
+
+  try {
+    const response = await fetch(CHAT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action,
+        memberId: member.memberId || "",
+        email: member.email || "",
+        ...payload,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Moderation action failed.");
+    }
+
+    if (action === "delete") {
+      showToast("Message removed.");
+    } else if (action === "mute") {
+      showToast(
+        data.chatBanned
+          ? `Muted ${payload.handle || payload.targetMemberId} and cleared spam.`
+          : `Unmuted ${payload.handle || payload.targetMemberId}.`
+      );
+    }
+
+    lastRenderedKey = "";
+    await fetchMessages({ silent: true, forceScroll: false });
+  } catch (err) {
+    showToast(err.message || "Could not complete action.");
   }
 }
 
@@ -391,19 +494,21 @@ export function initChat() {
     showToast("Club chat refreshed!");
   });
 
-  // Locked prompt buttons -> route to #login or #signup
-  document.getElementById("chatLoginBtn")?.addEventListener("click", () => {
-    window.location.hash = "#login";
-  });
-  document.getElementById("chatSignupBtn")?.addEventListener("click", () => {
-    window.location.hash = "#signup";
-  });
+  // Staff moderation click delegation (Delete / Mute)
+  document.getElementById("chatMessages")?.addEventListener("click", (e) => {
+    const delBtn = e.target.closest("[data-chat-delete]");
+    if (delBtn) {
+      const messageId = delBtn.getAttribute("data-chat-delete");
+      if (messageId) handleModAction("delete", { messageId });
+      return;
+    }
 
-  // Re-sync chat UI whenever the user logs in, signs up, or signs out
-  window.addEventListener("raveyns:auth-changed", (event) => {
-    syncChatAuthUI(event.detail?.member ?? null);
-    lastRenderedKey = "";
-    fetchMessages({ silent: true, forceScroll: false });
+    const muteBtn = e.target.closest("[data-chat-mute]");
+    if (muteBtn) {
+      const targetMemberId = muteBtn.getAttribute("data-chat-mute");
+      const handle = muteBtn.getAttribute("data-chat-mute-handle") || "";
+      if (targetMemberId) handleModAction("mute", { targetMemberId, handle });
+    }
   });
 
   // Also sync automatically if the user logs in/out in another browser tab
