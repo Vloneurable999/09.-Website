@@ -54,18 +54,14 @@ export default async function handler(req, res) {
   try {
     const body =
       typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
-    const { handle, email, password } = body;
+    const { handle, password } = body;
 
     const cleanHandle = String(handle || "").trim();
-    const cleanEmail = String(email || "").trim().toLowerCase();
     const cleanPassword = String(password || "");
 
     // Server-side validation
     if (!cleanHandle) {
-      return res.status(400).json({ error: "Please enter a username or handle." });
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      return res.status(400).json({ error: "Please enter a valid email address." });
+      return res.status(400).json({ error: "Please enter a username." });
     }
     if (cleanPassword.length < 6) {
       return res.status(400).json({ error: "Password must be at least 6 characters long." });
@@ -73,24 +69,22 @@ export default async function handler(req, res) {
 
     const formattedHandle = cleanHandle.startsWith("@") ? cleanHandle : `@${cleanHandle}`;
     const rawUsername = formattedHandle.slice(1);
+    if (!rawUsername) {
+      return res.status(400).json({ error: "Please enter a valid username." });
+    }
 
     const db = await getDatabase();
     const members = db.collection("members");
 
-    // Prevent duplicate signups with the same email or username (case-insensitive, with or without @)
+    // Prevent duplicate signups with the same username (case-insensitive, with or without @)
     const escapedUsername = rawUsername.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const existingMember = await members.findOne({
-      $or: [
-        { email: cleanEmail },
-        { handle: { $regex: `^@?${escapedUsername}$`, $options: "i" } },
-      ],
+      handle: { $regex: `^@?${escapedUsername}$`, $options: "i" },
     });
     if (existingMember) {
-      const conflictMsg =
-        existingMember.email === cleanEmail
-          ? "An account with this email is already in the club."
-          : "That username is already taken. Please choose another.";
-      return res.status(409).json({ error: conflictMsg });
+      return res.status(409).json({
+        error: "That username is already taken. Please choose another.",
+      });
     }
 
     // Generate sequential club member ID (e.g., #RV-0001, #RV-0002)
@@ -117,7 +111,6 @@ export default async function handler(req, res) {
       role: collectedBadges[0],
       badges: collectedBadges,
       handle: formattedHandle,
-      email: cleanEmail,
       passwordHash: hashPassword(cleanPassword),
       createdAt: now,
     };
@@ -132,7 +125,6 @@ export default async function handler(req, res) {
         role: newMember.role,
         badges: newMember.badges,
         handle: newMember.handle,
-        email: newMember.email,
       },
     });
   } catch (error) {

@@ -251,7 +251,15 @@ function updateMemberUI() {
 
     if (passIdEl) passIdEl.textContent = currentMember.memberId || "#RV-0001";
     if (passHandleEl) passHandleEl.textContent = currentMember.handle || "@member";
-    if (passEmailEl) passEmailEl.textContent = currentMember.email || "";
+    if (passEmailEl) {
+      if (currentMember.email) {
+        passEmailEl.textContent = currentMember.email;
+        passEmailEl.classList.remove("hidden");
+      } else {
+        passEmailEl.textContent = "";
+        passEmailEl.classList.add("hidden");
+      }
+    }
 
     if (passBadgesEl) {
       const badges = getMemberBadges(
@@ -350,16 +358,11 @@ async function handleSignupSubmit(event) {
   showAuthError("signupError", "");
 
   const handle = document.getElementById("signupHandle")?.value.trim() || "";
-  const email = document.getElementById("signupEmail")?.value.trim() || "";
   const password = document.getElementById("signupPassword")?.value || "";
   const submitBtn = document.getElementById("signupSubmitBtn");
 
   if (!handle) {
-    showAuthError("signupError", "Please enter a username or handle.");
-    return;
-  }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    showAuthError("signupError", "Please enter a valid email address.");
+    showAuthError("signupError", "Please enter a username.");
     return;
   }
   if (password.length < 6) {
@@ -377,7 +380,7 @@ async function handleSignupSubmit(event) {
     const response = await fetch(SIGNUP_API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ handle, email, password }),
+      body: JSON.stringify({ handle, password }),
     });
 
     const rawText = await response.text();
@@ -432,7 +435,7 @@ async function handleLoginSubmit(event) {
   const submitBtn = document.getElementById("loginSubmitBtn");
 
   if (!identifier) {
-    showAuthError("loginError", "Please enter your email or username.");
+    showAuthError("loginError", "Please enter your username.");
     return;
   }
   if (!password) {

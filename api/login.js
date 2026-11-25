@@ -64,11 +64,11 @@ export default async function handler(req, res) {
       typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
     const { identifier, email, handle, password } = body;
 
-    const rawIdentifier = String(identifier || email || handle || "").trim();
+    const rawIdentifier = String(identifier || handle || email || "").trim();
     const cleanPassword = String(password || "");
 
     if (!rawIdentifier) {
-      return res.status(400).json({ error: "Please enter your email or username." });
+      return res.status(400).json({ error: "Please enter your username." });
     }
     if (!cleanPassword) {
       return res.status(400).json({ error: "Please enter your password." });
@@ -77,7 +77,7 @@ export default async function handler(req, res) {
     const db = await getDatabase();
     const members = db.collection("members");
 
-    // Look up member by email (if input contains "@email.domain") or by username/handle
+    // Look up member by username/handle (still supports legacy email login if entered)
     const isEmailLookup = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawIdentifier);
     let member = null;
 
@@ -92,7 +92,7 @@ export default async function handler(req, res) {
     }
 
     if (!member || !verifyPassword(cleanPassword, member.passwordHash)) {
-      return res.status(401).json({ error: "Invalid email/username or password." });
+      return res.status(401).json({ error: "Invalid username or password." });
     }
 
     // Collect and stack all badges saved on the member (plus backfill OG if joined by Dec 1st)
@@ -166,7 +166,7 @@ export default async function handler(req, res) {
         role: resolvedBadges[0],
         badges: resolvedBadges,
         handle: member.handle,
-        email: member.email,
+        ...(member.email ? { email: member.email } : {}),
       },
     });
   } catch (error) {
