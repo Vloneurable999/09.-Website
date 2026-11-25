@@ -222,6 +222,43 @@ function buildStreamUrl(vaultId, member) {
 }
 
 /**
+ * Generates the inner HTML for an item's emoji reaction bar.
+ */
+function buildReactionsHtml(item) {
+  return EMOJI_LIST.map((emoji) => {
+    const info = item.reactions?.[emoji] || { count: 0, reacted: false };
+    const activeStyle = info.reacted
+      ? "bg-fuchsia-500/25 border-fuchsia-400/60 text-white shadow-neon-purple"
+      : "bg-white/[0.04] border-white/10 text-zinc-300 hover:bg-white/[0.09] hover:border-fuchsia-400/35";
+    return `
+      <button
+        type="button"
+        data-react-id="${item.id}"
+        data-react-emoji="${emoji}"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-mono border active:scale-95 transition-all cursor-pointer ${activeStyle}"
+        aria-label="React with ${emoji}"
+      >
+        <span>${emoji}</span>
+        <span class="${info.count > 0 ? "text-zinc-100" : "text-zinc-500"}">${info.count}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+/**
+ * Updates only the reaction buttons on a single card so the <video> element
+ * is never re-rendered, paused, or reloaded when reacting.
+ */
+function updateCardReactionsInPlace(updatedItem) {
+  const bar = document.querySelector(`[data-reactions-bar="${updatedItem.id}"]`);
+  if (bar) {
+    bar.innerHTML = buildReactionsHtml(updatedItem);
+  } else {
+    renderVaultItems();
+  }
+}
+
+/**
  * Renders the list of vault video cards and their emoji reaction bars.
  */
 function renderVaultItems() {
@@ -264,25 +301,7 @@ function renderVaultItems() {
       const dateLabel = formatDate(item.createdAt);
       const sizeLabel = formatFileSize(item.fileSize);
       const isConfirmingDelete = pendingDeleteId === item.id;
-
-      const reactionsHtml = EMOJI_LIST.map((emoji) => {
-        const info = item.reactions?.[emoji] || { count: 0, reacted: false };
-        const activeStyle = info.reacted
-          ? "bg-fuchsia-500/25 border-fuchsia-400/60 text-white shadow-neon-purple"
-          : "bg-white/[0.04] border-white/10 text-zinc-300 hover:bg-white/[0.09] hover:border-fuchsia-400/35";
-        return `
-          <button
-            type="button"
-            data-react-id="${item.id}"
-            data-react-emoji="${emoji}"
-            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-mono border active:scale-95 transition-all cursor-pointer ${activeStyle}"
-            aria-label="React with ${emoji}"
-          >
-            <span>${emoji}</span>
-            <span class="${info.count > 0 ? "text-zinc-100" : "text-zinc-500"}">${info.count}</span>
-          </button>
-        `;
-      }).join("");
+      const reactionsHtml = buildReactionsHtml(item);
 
       const deleteBtnHtml = canManage
         ? `
@@ -328,7 +347,7 @@ function renderVaultItems() {
           </div>
 
           <!-- Emoji Reactions Bar -->
-          <div class="p-4 pt-3 flex items-center flex-wrap gap-1.5">
+          <div data-reactions-bar="${item.id}" class="p-4 pt-3 flex items-center flex-wrap gap-1.5">
             ${reactionsHtml}
           </div>
         </article>
@@ -369,16 +388,18 @@ async function fetchVaultItems() {
         response.status === 404
           ? "Archive API (/api/vault) not found. Make sure api/vault.js is pushed and deployed on Vercel."
           : `Unable to load Club Archive (Error ${response.status}).`;
-      throw new Error(data.error || fallbackMsg);
+      const errDetail = typeof data.error === "string" ? data.error : fallbackMsg;
+      throw new Error(errDetail);
     }
 
     vaultItems = Array.isArray(data.items) ? data.items : [];
     renderVaultItems();
   } catch (err) {
-    setVaultError(err.message || "Could not load Club Archive.");
+    const errorMsg = typeof err.message === "string" ? err.message : "Could not load Club Archive.";
+    setVaultError(errorMsg);
     grid.innerHTML = `
       <div class="col-span-full py-10 text-center text-xs font-mono text-rose-300">
-        Unable to load Club Archive.
+        ${escapeHtml(errorMsg)}
       </div>
     `;
   }
@@ -411,7 +432,7 @@ async function handleReactionClick(vaultId, emoji) {
 
     if (data.item) {
       vaultItems = vaultItems.map((it) => (it.id === data.item.id ? data.item : it));
-      renderVaultItems();
+      updateCardReactionsInPlace(data.item);
     }
   } catch (err) {
     showToast(err.message || "Could not save reaction.");
@@ -660,6 +681,8 @@ export function initVault() {
   document.getElementById("vaultGrid")?.addEventListener("click", (e) => {
     const reactBtn = e.target.closest("[data-react-id]");
     if (reactBtn) {
+      e.preventDefault();
+      e.stopPropagation();
       const vaultId = reactBtn.getAttribute("data-react-id");
       const emoji = reactBtn.getAttribute("data-react-emoji");
       if (vaultId && emoji) handleReactionClick(vaultId, emoji);
@@ -668,6 +691,8 @@ export function initVault() {
 
     const deleteBtn = e.target.closest("[data-delete-vault]");
     if (deleteBtn) {
+      e.preventDefault();
+      e.stopPropagation();
       const vaultId = deleteBtn.getAttribute("data-delete-vault");
       if (vaultId) handleDeleteClick(vaultId);
     }
