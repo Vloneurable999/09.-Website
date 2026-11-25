@@ -2,7 +2,7 @@
  * ============================================================================
  * api/login.js — VERCEL SERVERLESS FUNCTION (MONGODB ATLAS)
  * Handles POST /api/login requests, verifies scrypt password hashes using
- * timing-safe comparison, and supports logging in by email or username/handle.
+ * timing-safe comparison, and authenticates by username/handle.
  * ============================================================================
  */
 import { MongoClient } from "mongodb";
@@ -62,9 +62,9 @@ export default async function handler(req, res) {
   try {
     const body =
       typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
-    const { identifier, email, handle, password } = body;
+    const { identifier, handle, password } = body;
 
-    const rawIdentifier = String(identifier || handle || email || "").trim();
+    const rawIdentifier = String(identifier || handle || "").trim();
     const cleanPassword = String(password || "");
 
     if (!rawIdentifier) {
@@ -77,19 +77,12 @@ export default async function handler(req, res) {
     const db = await getDatabase();
     const members = db.collection("members");
 
-    // Look up member by username/handle (still supports legacy email login if entered)
-    const isEmailLookup = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawIdentifier);
-    let member = null;
-
-    if (isEmailLookup) {
-      member = await members.findOne({ email: rawIdentifier.toLowerCase() });
-    } else {
-      const bareUsername = rawIdentifier.replace(/^@+/, "");
-      const escapedUsername = escapeRegex(bareUsername);
-      member = await members.findOne({
-        handle: { $regex: `^@?${escapedUsername}$`, $options: "i" },
-      });
-    }
+    // Look up member by username/handle (case-insensitive, with or without @)
+    const bareUsername = rawIdentifier.replace(/^@+/, "");
+    const escapedUsername = escapeRegex(bareUsername);
+    const member = await members.findOne({
+      handle: { $regex: `^@?${escapedUsername}$`, $options: "i" },
+    });
 
     if (!member || !verifyPassword(cleanPassword, member.passwordHash)) {
       return res.status(401).json({ error: "Invalid username or password." });
@@ -166,7 +159,6 @@ export default async function handler(req, res) {
         role: resolvedBadges[0],
         badges: resolvedBadges,
         handle: member.handle,
-        ...(member.email ? { email: member.email } : {}),
       },
     });
   } catch (error) {

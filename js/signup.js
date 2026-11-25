@@ -246,20 +246,10 @@ function updateMemberUI() {
 
     const passIdEl = document.getElementById("memberPassId");
     const passHandleEl = document.getElementById("memberPassHandle");
-    const passEmailEl = document.getElementById("memberPassEmail");
     const passBadgesEl = document.getElementById("memberPassBadges");
 
     if (passIdEl) passIdEl.textContent = currentMember.memberId || "#RV-0001";
     if (passHandleEl) passHandleEl.textContent = currentMember.handle || "@member";
-    if (passEmailEl) {
-      if (currentMember.email) {
-        passEmailEl.textContent = currentMember.email;
-        passEmailEl.classList.remove("hidden");
-      } else {
-        passEmailEl.textContent = "";
-        passEmailEl.classList.add("hidden");
-      }
-    }
 
     if (passBadgesEl) {
       const badges = getMemberBadges(
