@@ -2,7 +2,7 @@
 <html lang="en" class="dark scroll-smooth">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
   <title>raveyn's club</title>
   <meta name="description" content="the official club for raveyn. Stream recent uploads, follow socials, and track live YouTube milestones." />
 
@@ -32,6 +32,23 @@
       },
     };
   </script>
+
+  <style>
+    html,
+    body {
+      max-width: 100%;
+      overflow-x: hidden;
+      -webkit-text-size-adjust: 100%;
+    }
+    /* Prevent mobile Safari/Chrome from auto-zooming when tapping form inputs */
+    @media (max-width: 768px) {
+      input,
+      select,
+      textarea {
+        font-size: 16px !important;
+      }
+    }
+  </style>
 </head>
 
 <body class="bg-[#07050c] text-zinc-100 font-sans antialiased selection:bg-fuchsia-500/30 selection:text-fuchsia-200 overflow-x-hidden min-h-screen relative">
@@ -217,9 +234,9 @@
               </span>
             </div>
 
-            <div class="w-full flex items-center justify-center p-2 rounded-2xl bg-zinc-950/90 border border-fuchsia-500/25 shadow-inner overflow-x-auto hover:border-fuchsia-500/45 transition-colors">
-              <div class="rounded-xl overflow-hidden leading-none">
-                <iframe height="80px" width="300px" frameborder="0" src="https://livecounts.io/embed/youtube-live-subscriber-counter/UCNa9Uv9N1U6q7LzL-cCbSnA" class="block rounded-xl" style="border: 0; width:300px; height:80px; border-radius: 12px;"></iframe>
+            <div class="w-full flex items-center justify-center p-2 rounded-2xl bg-zinc-950/90 border border-fuchsia-500/25 shadow-inner overflow-hidden hover:border-fuchsia-500/45 transition-colors">
+              <div class="w-full max-w-[300px] rounded-xl overflow-hidden leading-none">
+                <iframe height="80px" width="300px" frameborder="0" src="https://livecounts.io/embed/youtube-live-subscriber-counter/UCNa9Uv9N1U6q7LzL-cCbSnA" class="block w-full max-w-[300px] rounded-xl" style="border: 0; height:80px; border-radius: 12px;"></iframe>
               </div>
             </div>
 
