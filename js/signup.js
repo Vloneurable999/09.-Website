@@ -616,7 +616,12 @@ export function initSignup() {
     showToast("Signed out of raveyn's club.");
   });
 
-  // Password toggles
+  // Form submissions & password toggles
+  document.getElementById("signupForm")?.addEventListener("submit", handleSignupSubmit);
+  document.getElementById("loginForm")?.addEventListener("submit", handleLoginSubmit);
+  bindPasswordToggle("signupPassword", "togglePasswordBtn");
+  bindPasswordToggle("loginPassword", "toggleLoginPasswordBtn");
+
   // Support direct links to #socials, #archive, #chat, #signup, #login, and browser Back button
   const syncRouteFromHash = () => {
     const hash = window.location.hash.replace(/^#/, "").toLowerCase();
