@@ -42,7 +42,7 @@ export const MEMBER_ROLES = {
     badgeClass: "bg-purple-500/20 text-purple-200 border-purple-400/40",
   },
   member: {
-    label: "MEMBER",
+    label: "CLUB MEMBER",
     badgeClass: "bg-white/[0.06] text-zinc-300 border-white/15",
   },
 };

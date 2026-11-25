@@ -1,421 +1,740 @@
 /**
  * ============================================================================
- * api/vault.js — VERCEL SERVERLESS FUNCTION (MONGODB ATLAS)
- * Members-Only Club Archive & Artist Studio Video Uploader
- * - GET /api/vault?memberId=...&email=...               -> List ready archive videos
- * - GET /api/vault?stream=<id>&memberId=...&email=...   -> Stream video (HTTP Range 206)
- * - POST /api/vault { action: "react" }                 -> Toggle emoji reaction (members)
- * - POST /api/vault { action: "init" | "chunk" | "complete" | "delete" } -> Artist only
+ * js/vault.js — MEMBERS-ONLY VAULT & ARTIST STUDIO UPLOADER
+ * - Artist-only upload panel (demos, snippets, teasers as video files)
+ * - Chunked uploads to stay safely under Vercel's 4.5 MB request limit
+ * - Members-only video feed with category filters & toggleable emoji reactions
  * ============================================================================
  */
-import { MongoClient, ObjectId, Binary } from "mongodb";
+import * as config from "./config.js";
+import { showToast } from "./ui.js";
 
-const MONGODB_URI = process.env.MONGODB_URI;
-const MONGODB_DB = process.env.MONGODB_DB || "raveyns_club";
+const VAULT_API_URL = config.VAULT_API_URL || "/api/vault";
+const STORAGE_KEY = "raveyns_club_member";
+const CHUNK_SIZE_BYTES = 1536 * 1024; // 1.5 MB raw -> ~2 MB base64 per chunk
+const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB max
+const EMOJI_LIST = ["🔥", "💜", "🤯", "😭", "✨", "🔁"];
 
-const ALLOWED_CATEGORIES = new Set(["demo", "snippet", "teaser"]);
-const ALLOWED_EMOJIS = new Set(["🔥", "💜", "🤯", "😭", "✨", "🔁"]);
-const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB max video size
-const MAX_RANGE_CHUNK_BYTES = 2 * 1024 * 1024; // 2 MB max per 206 stream response (Vercel safe)
+const CATEGORY_STYLES = {
+  demo: {
+    label: "DEMO",
+    badgeClass: "bg-purple-500/20 text-purple-200 border-purple-400/40",
+  },
+  snippet: {
+    label: "SNIPPET",
+    badgeClass: "bg-fuchsia-500/20 text-fuchsia-200 border-fuchsia-400/40",
+  },
+  teaser: {
+    label: "TEASER",
+    badgeClass: "bg-pink-500/20 text-pink-200 border-pink-400/40",
+  },
+};
+
+let vaultInitialized = false;
+let cachedMember = null;
+let vaultItems = [];
+let activeCategory = "all";
+let isUploading = false;
+let pendingDeleteId = null;
 
 /**
- * Reuse the MongoDB connection across warm Vercel serverless invocations.
+ * Safely escapes HTML entities.
  */
-async function getDatabase() {
-  if (!MONGODB_URI) {
-    throw new Error("MONGODB_URI environment variable is not set in Vercel.");
-  }
-
-  if (!globalThis._mongoClientPromise) {
-    const client = new MongoClient(MONGODB_URI);
-    globalThis._mongoClientPromise = client.connect().catch((err) => {
-      globalThis._mongoClientPromise = null;
-      throw err;
-    });
-  }
-
-  const client = await globalThis._mongoClientPromise;
-  return client.db(MONGODB_DB);
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /**
- * Looks up a verified club member by memberId or email.
+ * Reads the currently signed-in member from shared state or localStorage.
  */
-async function findMember(db, memberId, email) {
-  const cleanMemberId = String(memberId || "").trim();
-  const cleanEmail = String(email || "").trim().toLowerCase();
+function getCurrentMember() {
+  if (cachedMember && cachedMember.handle && (cachedMember.memberId || cachedMember.email)) {
+    return cachedMember;
+  }
 
-  const clauses = [];
-  if (cleanMemberId) clauses.push({ memberId: cleanMemberId });
-  if (cleanEmail) clauses.push({ email: cleanEmail });
-  if (clauses.length === 0) return null;
+  const shared = window.__raveynsCurrentMember;
+  if (shared && shared.handle && (shared.memberId || shared.email)) {
+    cachedMember = shared;
+    return cachedMember;
+  }
 
-  return db.collection("members").findOne({ $or: clauses });
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || !parsed.handle || (!parsed.memberId && !parsed.email)) {
+      return null;
+    }
+    cachedMember = parsed;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Checks whether a member has Artist or Admin privileges to upload/delete archive videos.
+ * Determines whether the current member is raveyn (artist/admin) and allowed
+ * to see the private Studio Upload Panel.
  */
-function isArtistMember(member) {
+function isArtistUser(member) {
   if (!member) return false;
-
-  const normalizedId = String(member.memberId || "").trim().toUpperCase();
+  if (typeof config.getMemberBadges === "function") {
+    const badges = config.getMemberBadges(
+      member.memberId,
+      member.badges,
+      member.role,
+      member.handle
+    );
+    return badges.some((b) => b.key === "artist" || b.key === "admin");
+  }
   const lowerHandle = String(member.handle || "").trim().toLowerCase();
-  const lowerRole = String(member.role || "").trim().toLowerCase();
-  const badges = Array.isArray(member.badges)
-    ? member.badges.map((b) => String(b || "").trim().toLowerCase())
-    : [];
-
   return (
-    normalizedId === "#RV-0001" ||
+    String(member.memberId || "").trim().toUpperCase() === "#RV-0001" ||
     lowerHandle === "@raveyn" ||
-    lowerHandle === "@itsraveyn" ||
-    lowerRole === "artist" ||
-    lowerRole === "admin" ||
-    badges.includes("artist") ||
-    badges.includes("admin")
+    lowerHandle === "@itsraveyn"
   );
 }
 
 /**
- * Formats a MongoDB archive document into a safe frontend payload with reaction counts.
+ * Formats byte count into a readable MB string.
  */
-function formatVaultItem(doc, viewerMemberId) {
-  const rawReactions = doc.reactions && typeof doc.reactions === "object" ? doc.reactions : {};
-  const reactions = {};
-
-  for (const emoji of ALLOWED_EMOJIS) {
-    const voters = Array.isArray(rawReactions[emoji]) ? rawReactions[emoji] : [];
-    reactions[emoji] = {
-      count: voters.length,
-      reacted: Boolean(viewerMemberId && voters.includes(viewerMemberId)),
-    };
-  }
-
-  return {
-    id: doc._id.toString(),
-    title: doc.title || "Untitled",
-    category: ALLOWED_CATEGORIES.has(doc.category) ? doc.category : "demo",
-    caption: doc.caption || "",
-    mimeType: doc.mimeType || "video/mp4",
-    fileSize: doc.fileSize || 0,
-    uploadedBy: doc.uploadedBy || "@raveyn",
-    createdAt: doc.createdAt || new Date(),
-    reactions,
-  };
+function formatFileSize(bytes) {
+  if (!bytes) return "";
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(bytes / 1024)} KB`;
 }
 
 /**
- * Converts a MongoDB Binary or Buffer chunk into a Node.js Buffer.
+ * Formats a timestamp into a clean short date.
  */
-function toNodeBuffer(data) {
-  if (!data) return Buffer.alloc(0);
-  if (Buffer.isBuffer(data)) return data;
-  if (data.buffer) return Buffer.from(data.buffer);
-  return Buffer.from(data);
+function formatDate(isoString) {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
-export default async function handler(req, res) {
-  try {
-    const db = await getDatabase();
-    const vaultItems = db.collection("vault_items");
-    const vaultChunks = db.collection("vault_chunks");
+/**
+ * Converts a Blob chunk into a raw base64 string.
+ */
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const commaIndex = result.indexOf(",");
+      resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+    };
+    reader.onerror = () => reject(new Error("Failed to read video file chunk."));
+    reader.readAsDataURL(blob);
+  });
+}
 
-    // ------------------------------------------------------------------------
-    // GET /api/vault — Stream a video OR list all ready Club Archive items
-    // ------------------------------------------------------------------------
-    if (req.method === "GET") {
-      const { memberId, email, stream } = req.query || {};
-      const member = await findMember(db, memberId, email);
-
-      if (!member) {
-        return res.status(401).json({
-          error: "Members only. Please sign in to access the Club Archive.",
-        });
-      }
-
-      // 1. STREAM VIDEO BY ID (Supports HTTP Range 206 for smooth seeking)
-      if (stream) {
-        if (!ObjectId.isValid(stream)) {
-          return res.status(400).json({ error: "Invalid archive video ID." });
-        }
-
-        const vaultObjectId = new ObjectId(stream);
-        const item = await vaultItems.findOne({ _id: vaultObjectId, status: "ready" });
-        if (!item) {
-          return res.status(404).json({ error: "Archive video not found." });
-        }
-
-        const totalSize = Number(item.fileSize) || 0;
-        const chunkSize = Number(item.chunkSize) || 1536 * 1024;
-        const mimeType = item.mimeType || "video/mp4";
-
-        if (totalSize <= 0) {
-          return res.status(404).json({ error: "Video data is empty." });
-        }
-
-        const rangeHeader = req.headers.range;
-        let start = 0;
-        let end = Math.min(totalSize - 1, MAX_RANGE_CHUNK_BYTES - 1);
-        let isPartial = false;
-
-        if (rangeHeader) {
-          const match = String(rangeHeader).match(/bytes=(\d*)-(\d*)/);
-          if (match) {
-            isPartial = true;
-            start = match[1] ? parseInt(match[1], 10) : 0;
-            const requestedEnd = match[2] ? parseInt(match[2], 10) : totalSize - 1;
-            end = Math.min(requestedEnd, totalSize - 1, start + MAX_RANGE_CHUNK_BYTES - 1);
-          }
-        } else if (totalSize <= MAX_RANGE_CHUNK_BYTES) {
-          end = totalSize - 1;
-        } else {
-          // Cap un-ranged requests to stay under Vercel's response payload limit
-          isPartial = true;
-        }
-
-        if (start >= totalSize || start > end || start < 0) {
-          res.setHeader("Content-Range", `bytes */${totalSize}`);
-          return res.status(416).end();
-        }
-
-        const startChunk = Math.floor(start / chunkSize);
-        const endChunk = Math.floor(end / chunkSize);
-
-        const chunks = await vaultChunks
-          .find({
-            vaultId: vaultObjectId,
-            index: { $gte: startChunk, $lte: endChunk },
-          })
-          .sort({ index: 1 })
-          .toArray();
-
-        if (!chunks.length) {
-          return res.status(404).json({ error: "Video chunks not found." });
-        }
-
-        const combined = Buffer.concat(chunks.map((c) => toNodeBuffer(c.data)));
-        const sliceStart = start - startChunk * chunkSize;
-        const sliceEnd = end - startChunk * chunkSize + 1;
-        const payload = combined.subarray(sliceStart, sliceEnd);
-
-        res.setHeader("Content-Type", mimeType);
-        res.setHeader("Accept-Ranges", "bytes");
-        res.setHeader("Content-Length", payload.length);
-        res.setHeader("Cache-Control", "private, max-age=3600");
-
-        if (isPartial) {
-          res.setHeader("Content-Range", `bytes ${start}-${start + payload.length - 1}/${totalSize}`);
-          return res.status(206).send(payload);
-        }
-
-        return res.status(200).send(payload);
-      }
-
-      // 2. LIST ALL READY ARCHIVE VIDEOS
-      const docs = await vaultItems
-        .find({ status: "ready" })
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .toArray();
-
-      res.setHeader("Cache-Control", "no-store");
-      return res.status(200).json({
-        items: docs.map((doc) => formatVaultItem(doc, member.memberId)),
-      });
-    }
-
-    // ------------------------------------------------------------------------
-    // POST /api/vault — Emoji reactions (members) & Uploads/Deletes (artist)
-    // ------------------------------------------------------------------------
-    if (req.method === "POST") {
-      const body =
-        typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
-      const { action, memberId, email } = body;
-
-      const member = await findMember(db, memberId, email);
-      if (!member) {
-        return res.status(401).json({
-          error: "Members only. Please sign in to access the Club Archive.",
-        });
-      }
-
-      // 1. EMOJI REACTION (Available to all signed-in members)
-      if (action === "react") {
-        const { vaultId, emoji } = body;
-        if (!ObjectId.isValid(vaultId)) {
-          return res.status(400).json({ error: "Invalid archive item ID." });
-        }
-        if (!ALLOWED_EMOJIS.has(emoji)) {
-          return res.status(400).json({ error: "Unsupported emoji reaction." });
-        }
-
-        const vaultObjectId = new ObjectId(vaultId);
-        const item = await vaultItems.findOne({ _id: vaultObjectId, status: "ready" });
-        if (!item) {
-          return res.status(404).json({ error: "Archive item not found." });
-        }
-
-        const currentVoters = Array.isArray(item.reactions?.[emoji])
-          ? item.reactions[emoji]
-          : [];
-        const hasReacted = currentVoters.includes(member.memberId);
-
-        const updateOp = hasReacted
-          ? { $pull: { [`reactions.${emoji}`]: member.memberId } }
-          : { $addToSet: { [`reactions.${emoji}`]: member.memberId } };
-
-        await vaultItems.updateOne({ _id: vaultObjectId }, updateOp);
-        const updated = await vaultItems.findOne({ _id: vaultObjectId });
-
-        return res.status(200).json({
-          item: formatVaultItem(updated, member.memberId),
-        });
-      }
-
-      // All remaining actions (init, chunk, complete, delete) are ARTIST / ADMIN ONLY
-      if (!isArtistMember(member)) {
-        return res.status(403).json({
-          error: "Only raveyn can upload or manage archive videos.",
-        });
-      }
-
-      // 2. INITIALIZE CHUNKED UPLOAD
-      if (action === "init") {
-        const cleanTitle = String(body.title || "").trim().slice(0, 100);
-        const cleanCategory = String(body.category || "demo").trim().toLowerCase();
-        const cleanCaption = String(body.caption || "").trim().slice(0, 280);
-        const mimeType = String(body.mimeType || "video/mp4").trim();
-        const fileSize = Number(body.fileSize) || 0;
-        const chunkCount = Number(body.chunkCount) || 0;
-        const chunkSize = Number(body.chunkSize) || 1536 * 1024;
-
-        if (!cleanTitle) {
-          return res.status(400).json({ error: "Please provide a title for the video." });
-        }
-        if (!ALLOWED_CATEGORIES.has(cleanCategory)) {
-          return res.status(400).json({ error: "Invalid category. Use demo, snippet, or teaser." });
-        }
-        if (!mimeType.startsWith("video/")) {
-          return res.status(400).json({ error: "Only video files are allowed." });
-        }
-        if (fileSize <= 0 || fileSize > MAX_VIDEO_BYTES) {
-          return res.status(400).json({ error: "Video must be between 1 byte and 50 MB." });
-        }
-        if (chunkCount <= 0 || chunkCount > 100) {
-          return res.status(400).json({ error: "Invalid chunk count." });
-        }
-
-        const insertRes = await vaultItems.insertOne({
-          title: cleanTitle,
-          category: cleanCategory,
-          caption: cleanCaption,
-          mimeType,
-          fileSize,
-          chunkCount,
-          chunkSize,
-          status: "uploading",
-          uploadedBy: member.handle || "@raveyn",
-          uploadedByMemberId: member.memberId,
-          reactions: {},
-          createdAt: new Date(),
-        });
-
-        return res.status(201).json({
-          vaultId: insertRes.insertedId.toString(),
-        });
-      }
-
-      // 3. UPLOAD INDIVIDUAL VIDEO CHUNK
-      if (action === "chunk") {
-        const { vaultId, index, dataBase64 } = body;
-        if (!ObjectId.isValid(vaultId)) {
-          return res.status(400).json({ error: "Invalid archive upload ID." });
-        }
-        const chunkIndex = Number(index);
-        if (!Number.isInteger(chunkIndex) || chunkIndex < 0) {
-          return res.status(400).json({ error: "Invalid chunk index." });
-        }
-        if (typeof dataBase64 !== "string" || !dataBase64.length) {
-          return res.status(400).json({ error: "Missing chunk data." });
-        }
-
-        const vaultObjectId = new ObjectId(vaultId);
-        const item = await vaultItems.findOne({ _id: vaultObjectId });
-        if (!item) {
-          return res.status(404).json({ error: "Upload session not found." });
-        }
-
-        const buffer = Buffer.from(dataBase64, "base64");
-        await vaultChunks.updateOne(
-          { vaultId: vaultObjectId, index: chunkIndex },
-          {
-            $set: {
-              vaultId: vaultObjectId,
-              index: chunkIndex,
-              data: new Binary(buffer),
-            },
-          },
-          { upsert: true }
-        );
-
-        return res.status(200).json({ ok: true, index: chunkIndex });
-      }
-
-      // 4. FINALIZE CHUNKED UPLOAD
-      if (action === "complete") {
-        const { vaultId } = body;
-        if (!ObjectId.isValid(vaultId)) {
-          return res.status(400).json({ error: "Invalid archive upload ID." });
-        }
-
-        const vaultObjectId = new ObjectId(vaultId);
-        const item = await vaultItems.findOne({ _id: vaultObjectId });
-        if (!item) {
-          return res.status(404).json({ error: "Upload session not found." });
-        }
-
-        const uploadedChunks = await vaultChunks.countDocuments({ vaultId: vaultObjectId });
-        if (uploadedChunks < (item.chunkCount || 1)) {
-          return res.status(400).json({
-            error: "Some video chunks are missing. Please try uploading again.",
-          });
-        }
-
-        await vaultItems.updateOne(
-          { _id: vaultObjectId },
-          { $set: { status: "ready", updatedAt: new Date() } }
-        );
-
-        const readyItem = await vaultItems.findOne({ _id: vaultObjectId });
-        return res.status(200).json({
-          item: formatVaultItem(readyItem, member.memberId),
-        });
-      }
-
-      // 5. DELETE ARCHIVE VIDEO
-      if (action === "delete") {
-        const { vaultId } = body;
-        if (!ObjectId.isValid(vaultId)) {
-          return res.status(400).json({ error: "Invalid archive item ID." });
-        }
-
-        const vaultObjectId = new ObjectId(vaultId);
-        await vaultChunks.deleteMany({ vaultId: vaultObjectId });
-        await vaultItems.deleteOne({ _id: vaultObjectId });
-
-        return res.status(200).json({ ok: true, deletedId: vaultId });
-      }
-
-      return res.status(400).json({ error: "Unknown archive action." });
-    }
-
-    res.setHeader("Allow", ["GET", "POST"]);
-    return res.status(405).json({ error: "Method not allowed." });
-  } catch (error) {
-    console.error("MongoDB Club Archive Error:", error);
-    return res.status(500).json({
-      error: "Server error while accessing the Club Archive. Please try again.",
-    });
+/**
+ * Shows or clears an inline error banner inside the Vault section.
+ */
+function setVaultError(message = "") {
+  const box = document.getElementById("vaultError");
+  if (!box) return;
+  if (message) {
+    box.textContent = message;
+    box.classList.remove("hidden");
+  } else {
+    box.textContent = "";
+    box.classList.add("hidden");
   }
+}
+
+/**
+ * Shows or clears an inline error inside the Artist Upload Panel.
+ */
+function setUploadError(message = "") {
+  const box = document.getElementById("vaultUploadError");
+  if (!box) return;
+  if (message) {
+    box.textContent = message;
+    box.classList.remove("hidden");
+  } else {
+    box.textContent = "";
+    box.classList.add("hidden");
+  }
+}
+
+/**
+ * Toggles the Locked View, Members Vault View, and Artist-Only Studio Panel.
+ */
+function syncVaultAuthUI(explicitMember) {
+  if (explicitMember !== undefined) {
+    cachedMember = explicitMember || null;
+  }
+
+  const member = getCurrentMember();
+  const lockedCard = document.getElementById("vaultLockedCard");
+  const unlockedView = document.getElementById("vaultUnlockedView");
+  const artistPanel = document.getElementById("artistStudioPanel");
+
+  if (member) {
+    lockedCard?.classList.add("hidden");
+    unlockedView?.classList.remove("hidden");
+
+    if (isArtistUser(member)) {
+      artistPanel?.classList.remove("hidden");
+    } else {
+      artistPanel?.classList.add("hidden");
+    }
+  } else {
+    lockedCard?.classList.remove("hidden");
+    unlockedView?.classList.add("hidden");
+    artistPanel?.classList.add("hidden");
+  }
+}
+
+/**
+ * Updates active styling on the Vault category filter pills.
+ */
+function updateFilterButtons() {
+  document.querySelectorAll("[data-vault-filter]").forEach((btn) => {
+    const isSelected = btn.getAttribute("data-vault-filter") === activeCategory;
+    if (isSelected) {
+      btn.classList.add("bg-fuchsia-500/25", "text-white", "border-fuchsia-400/50");
+      btn.classList.remove("bg-white/[0.03]", "text-zinc-400", "border-white/10");
+    } else {
+      btn.classList.remove("bg-fuchsia-500/25", "text-white", "border-fuchsia-400/50");
+      btn.classList.add("bg-white/[0.03]", "text-zinc-400", "border-white/10");
+    }
+  });
+}
+
+/**
+ * Builds the authenticated video stream URL for a vault item.
+ */
+function buildStreamUrl(vaultId, member) {
+  const params = new URLSearchParams({
+    stream: vaultId,
+    memberId: member.memberId || "",
+    email: member.email || "",
+  });
+  return `${VAULT_API_URL}?${params.toString()}`;
+}
+
+/**
+ * Generates the inner HTML for an item's emoji reaction bar.
+ */
+function buildReactionsHtml(item) {
+  return EMOJI_LIST.map((emoji) => {
+    const info = item.reactions?.[emoji] || { count: 0, reacted: false };
+    const activeStyle = info.reacted
+      ? "bg-fuchsia-500/25 border-fuchsia-400/60 text-white shadow-neon-purple"
+      : "bg-white/[0.04] border-white/10 text-zinc-300 hover:bg-white/[0.09] hover:border-fuchsia-400/35";
+    return `
+      <button
+        type="button"
+        data-react-id="${item.id}"
+        data-react-emoji="${emoji}"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-mono border active:scale-95 transition-all cursor-pointer ${activeStyle}"
+        aria-label="React with ${emoji}"
+      >
+        <span>${emoji}</span>
+        <span class="${info.count > 0 ? "text-zinc-100" : "text-zinc-500"}">${info.count}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+/**
+ * Updates only the reaction buttons on a single card so the <video> element
+ * is never re-rendered, paused, or reloaded when reacting.
+ */
+function updateCardReactionsInPlace(updatedItem) {
+  const bar = document.querySelector(`[data-reactions-bar="${updatedItem.id}"]`);
+  if (bar) {
+    bar.innerHTML = buildReactionsHtml(updatedItem);
+  } else {
+    renderVaultItems();
+  }
+}
+
+/**
+ * Renders the list of vault video cards and their emoji reaction bars.
+ */
+function renderVaultItems() {
+  const grid = document.getElementById("vaultGrid");
+  if (!grid) return;
+
+  const member = getCurrentMember();
+  if (!member) {
+    grid.innerHTML = "";
+    return;
+  }
+
+  const canManage = isArtistUser(member);
+  const filtered =
+    activeCategory === "all"
+      ? vaultItems
+      : vaultItems.filter((item) => item.category === activeCategory);
+
+  if (!filtered.length) {
+    grid.innerHTML = `
+      <div class="col-span-full rounded-3xl bg-white/[0.02] border border-white/10 py-12 px-6 text-center">
+        <span class="text-2xl text-fuchsia-400/80">✦</span>
+        <p class="mt-2 text-sm font-medium text-zinc-200">
+          ${activeCategory === "all" ? "The archive is quiet right now" : `No ${activeCategory}s uploaded yet`}
+        </p>
+        <p class="mt-1 text-xs text-zinc-500">
+          ${canManage ? "Use your Artist Studio panel above to drop a new demo, snippet, or teaser." : "Check back soon for unreleased demos, snippets, and teasers from raveyn."}
+        </p>
+      </div>
+    `;
+    return;
+  }
+
+  grid.innerHTML = filtered
+    .map((item) => {
+      const cat = CATEGORY_STYLES[item.category] || CATEGORY_STYLES.demo;
+      const streamUrl = buildStreamUrl(item.id, member);
+      const safeTitle = escapeHtml(item.title);
+      const safeCaption = escapeHtml(item.caption);
+      const dateLabel = formatDate(item.createdAt);
+      const sizeLabel = formatFileSize(item.fileSize);
+      const isConfirmingDelete = pendingDeleteId === item.id;
+      const reactionsHtml = buildReactionsHtml(item);
+
+      const deleteBtnHtml = canManage
+        ? `
+          <button
+            type="button"
+            data-delete-vault="${item.id}"
+            class="px-2.5 py-1 rounded-lg text-[10px] font-mono border transition-colors cursor-pointer ${
+              isConfirmingDelete
+                ? "bg-rose-500/30 border-rose-400/70 text-rose-100"
+                : "bg-white/[0.03] border-white/10 text-zinc-400 hover:text-rose-300 hover:border-rose-400/40"
+            }"
+          >
+            ${isConfirmingDelete ? "Confirm Delete?" : "Delete"}
+          </button>
+        `
+        : "";
+
+      return `
+        <article class="relative overflow-hidden rounded-3xl bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-fuchsia-400/35 transition-colors flex flex-col">
+          <div class="p-4 pb-3 flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2 flex-wrap mb-1.5">
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-mono uppercase tracking-wider border ${cat.badgeClass}">${cat.label}</span>
+                <span class="font-mono text-[10px] text-zinc-500">${dateLabel}${sizeLabel ? ` · ${sizeLabel}` : ""}</span>
+              </div>
+              <h3 class="text-base font-bold text-white truncate">${safeTitle}</h3>
+              ${safeCaption ? `<p class="mt-1 text-xs text-zinc-400 leading-relaxed">${safeCaption}</p>` : ""}
+            </div>
+            ${deleteBtnHtml}
+          </div>
+
+          <!-- Video Player -->
+          <div class="px-4">
+            <div class="rounded-2xl overflow-hidden bg-black/80 border border-white/10">
+              <video
+                controls
+                playsinline
+                preload="metadata"
+                class="w-full max-h-80 object-contain bg-black"
+                src="${streamUrl}"
+              ></video>
+            </div>
+          </div>
+
+          <!-- Emoji Reactions Bar -->
+          <div data-reactions-bar="${item.id}" class="p-4 pt-3 flex items-center flex-wrap gap-1.5">
+            ${reactionsHtml}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+/**
+ * Fetches all vault items from /api/vault for the logged-in member.
+ */
+async function fetchVaultItems() {
+  const member = getCurrentMember();
+  const grid = document.getElementById("vaultGrid");
+  if (!member || !grid) return;
+
+  setVaultError("");
+  try {
+    const params = new URLSearchParams({
+      memberId: member.memberId || "",
+      email: member.email || "",
+    });
+    const response = await fetch(`${VAULT_API_URL}?${params.toString()}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+
+    const rawText = await response.text();
+    let data = {};
+    try {
+      data = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      console.error("Non-JSON response from /api/vault:", response.status);
+    }
+
+    if (!response.ok) {
+      const fallbackMsg =
+        response.status === 404
+          ? "Archive API (/api/vault) not found. Make sure api/vault.js is pushed and deployed on Vercel."
+          : `Unable to load Club Archive (Error ${response.status}).`;
+      throw new Error(data.error || fallbackMsg);
+    }
+
+    vaultItems = Array.isArray(data.items) ? data.items : [];
+    renderVaultItems();
+  } catch (err) {
+    setVaultError(err.message || "Could not load Club Archive.");
+    grid.innerHTML = `
+      <div class="col-span-full py-10 text-center text-xs font-mono text-rose-300">
+        Unable to load Club Archive.
+      </div>
+    `;
+  }
+}
+
+/**
+ * Handles toggling an emoji reaction on a vault item.
+ */
+async function handleReactionClick(vaultId, emoji) {
+  const member = getCurrentMember();
+  if (!member) return;
+
+  try {
+    const response = await fetch(VAULT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "react",
+        memberId: member.memberId || "",
+        email: member.email || "",
+        vaultId,
+        emoji,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Could not update reaction.");
+    }
+
+    if (data.item) {
+      vaultItems = vaultItems.map((it) => (it.id === data.item.id ? data.item : it));
+      updateCardReactionsInPlace(data.item);
+    }
+  } catch (err) {
+    showToast(err.message || "Could not save reaction.");
+  }
+}
+
+/**
+ * Handles deleting a vault video (artist only, with two-click inline confirmation).
+ */
+async function handleDeleteClick(vaultId) {
+  if (pendingDeleteId !== vaultId) {
+    pendingDeleteId = vaultId;
+    renderVaultItems();
+    return;
+  }
+
+  const member = getCurrentMember();
+  if (!member) return;
+
+  pendingDeleteId = null;
+  try {
+    const response = await fetch(VAULT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "delete",
+        memberId: member.memberId || "",
+        email: member.email || "",
+        vaultId,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "Could not delete video.");
+    }
+
+    vaultItems = vaultItems.filter((it) => it.id !== vaultId);
+    renderVaultItems();
+    showToast("Removed from Club Archive.");
+  } catch (err) {
+    showToast(err.message || "Delete failed.");
+  }
+}
+
+/**
+ * Handles chunked video file upload from the Artist-Only Studio Panel.
+ */
+async function handleVaultUpload(event) {
+  event.preventDefault();
+  if (isUploading) return;
+
+  const member = getCurrentMember();
+  if (!member || !isArtistUser(member)) {
+    setUploadError("Only raveyn can upload to the Club Archive.");
+    return;
+  }
+
+  const titleInput = document.getElementById("vaultTitleInput");
+  const categorySelect = document.getElementById("vaultCategoryInput");
+  const captionInput = document.getElementById("vaultCaptionInput");
+  const fileInput = document.getElementById("vaultFileInput");
+  const uploadBtn = document.getElementById("vaultUploadBtn");
+  const progressWrap = document.getElementById("vaultUploadProgressWrap");
+  const progressBar = document.getElementById("vaultUploadProgressBar");
+  const progressText = document.getElementById("vaultUploadProgressText");
+
+  const title = titleInput?.value.trim() || "";
+  const category = categorySelect?.value || "demo";
+  const caption = captionInput?.value.trim() || "";
+  const file = fileInput?.files?.[0];
+
+  setUploadError("");
+
+  if (!title) {
+    setUploadError("Please enter a title for your drop.");
+    return;
+  }
+  if (!file) {
+    setUploadError("Please select a video file (MP4, WebM, or MOV).");
+    return;
+  }
+  if (!file.type || !file.type.startsWith("video/")) {
+    setUploadError("Selected file must be a video (MP4, WebM, or MOV).");
+    return;
+  }
+  if (file.size > MAX_VIDEO_BYTES) {
+    setUploadError("Video must be 50 MB or smaller.");
+    return;
+  }
+
+  isUploading = true;
+  const originalBtnText = uploadBtn ? uploadBtn.textContent : "Upload to Archive ✦";
+  if (uploadBtn) {
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = "Uploading...";
+  }
+  progressWrap?.classList.remove("hidden");
+  if (progressBar) progressBar.style.width = "5%";
+  if (progressText) progressText.textContent = "Preparing upload...";
+
+  try {
+    const chunkCount = Math.ceil(file.size / CHUNK_SIZE_BYTES);
+
+    // Step 1: Initialize upload session
+    const initRes = await fetch(VAULT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "init",
+        memberId: member.memberId || "",
+        email: member.email || "",
+        title,
+        category,
+        caption,
+        mimeType: file.type,
+        fileSize: file.size,
+        chunkCount,
+        chunkSize: CHUNK_SIZE_BYTES,
+      }),
+    });
+
+    const initData = await initRes.json();
+    if (!initRes.ok || !initData.vaultId) {
+      throw new Error(initData.error || `Upload failed to start (Error ${initRes.status}).`);
+    }
+
+    const { vaultId } = initData;
+
+    // Step 2: Upload chunks sequentially
+    for (let i = 0; i < chunkCount; i++) {
+      const start = i * CHUNK_SIZE_BYTES;
+      const end = Math.min(file.size, start + CHUNK_SIZE_BYTES);
+      const chunkBlob = file.slice(start, end);
+      const dataBase64 = await blobToBase64(chunkBlob);
+
+      const chunkRes = await fetch(VAULT_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "chunk",
+          memberId: member.memberId || "",
+          email: member.email || "",
+          vaultId,
+          index: i,
+          dataBase64,
+        }),
+      });
+
+      const chunkData = await chunkRes.json();
+      if (!chunkRes.ok) {
+        throw new Error(chunkData.error || `Chunk ${i + 1} failed to upload.`);
+      }
+
+      const pct = Math.round(((i + 1) / chunkCount) * 90) + 5;
+      if (progressBar) progressBar.style.width = `${pct}%`;
+      if (progressText) {
+        progressText.textContent = `Uploading chunk ${i + 1} of ${chunkCount} (${pct}%)...`;
+      }
+    }
+
+    // Step 3: Finalize upload
+    const completeRes = await fetch(VAULT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "complete",
+        memberId: member.memberId || "",
+        email: member.email || "",
+        vaultId,
+      }),
+    });
+
+    const completeData = await completeRes.json();
+    if (!completeRes.ok || !completeData.item) {
+      throw new Error(completeData.error || "Failed to finalize video upload.");
+    }
+
+    if (progressBar) progressBar.style.width = "100%";
+    if (progressText) progressText.textContent = "Published to Club Archive!";
+
+    document.getElementById("vaultUploadForm")?.reset();
+    const fileLabel = document.getElementById("vaultSelectedFileName");
+    if (fileLabel) fileLabel.textContent = "MP4, WebM, or MOV · up to 50 MB";
+
+    vaultItems = [completeData.item, ...vaultItems];
+    activeCategory = "all";
+    updateFilterButtons();
+    renderVaultItems();
+    showToast(`Uploaded "${completeData.item.title}" to Club Archive!`);
+  } catch (err) {
+    setUploadError(err.message || "Upload failed. Please try again.");
+  } finally {
+    isUploading = false;
+    if (uploadBtn) {
+      uploadBtn.disabled = false;
+      uploadBtn.textContent = originalBtnText;
+    }
+    setTimeout(() => {
+      progressWrap?.classList.add("hidden");
+      if (progressBar) progressBar.style.width = "0%";
+    }, 1500);
+  }
+}
+
+/**
+ * Initializes the Members-Only Vault & Artist Studio Upload Panel.
+ */
+export function initVault() {
+  if (vaultInitialized) return;
+  const section = document.getElementById("vault");
+  if (!section) return;
+
+  vaultInitialized = true;
+  syncVaultAuthUI();
+  updateFilterButtons();
+
+  if (getCurrentMember()) {
+    fetchVaultItems();
+  }
+
+  // Artist upload form
+  document.getElementById("vaultUploadForm")?.addEventListener("submit", handleVaultUpload);
+
+  // Show selected file name & size
+  document.getElementById("vaultFileInput")?.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    const label = document.getElementById("vaultSelectedFileName");
+    if (label) {
+      label.textContent = file
+        ? `${file.name} (${formatFileSize(file.size)})`
+        : "MP4, WebM, or MOV · up to 50 MB";
+    }
+  });
+
+  // Category filter buttons
+  document.querySelectorAll("[data-vault-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeCategory = btn.getAttribute("data-vault-filter") || "all";
+      updateFilterButtons();
+      renderVaultItems();
+    });
+  });
+
+  // Event delegation for emoji reactions & artist delete buttons
+  document.getElementById("vaultGrid")?.addEventListener("click", (e) => {
+    const reactBtn = e.target.closest("[data-react-id]");
+    if (reactBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const vaultId = reactBtn.getAttribute("data-react-id");
+      const emoji = reactBtn.getAttribute("data-react-emoji");
+      if (vaultId && emoji) handleReactionClick(vaultId, emoji);
+      return;
+    }
+
+    const deleteBtn = e.target.closest("[data-delete-vault]");
+    if (deleteBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const vaultId = deleteBtn.getAttribute("data-delete-vault");
+      if (vaultId) handleDeleteClick(vaultId);
+    }
+  });
+
+  // Refresh button
+  document.getElementById("vaultRefreshBtn")?.addEventListener("click", async () => {
+    await fetchVaultItems();
+    showToast("Club Archive refreshed!");
+  });
+
+  // Sync automatically whenever auth state changes
+  window.addEventListener("raveyns:auth-changed", (event) => {
+    syncVaultAuthUI(event.detail?.member ?? null);
+    if (getCurrentMember()) {
+      fetchVaultItems();
+    } else {
+      vaultItems = [];
+      renderVaultItems();
+    }
+  });
+
+  // Refresh archive when navigating onto the dedicated Archive page
+  window.addEventListener("raveyns:view-changed", (event) => {
+    if (event.detail?.view === "archive" || event.detail?.view === "vault") {
+      syncVaultAuthUI();
+      if (getCurrentMember()) {
+        fetchVaultItems();
+      }
+    }
+  });
+
+  window.addEventListener("storage", (event) => {
+    if (event.key === STORAGE_KEY) {
+      cachedMember = null;
+      syncVaultAuthUI();
+      if (getCurrentMember()) fetchVaultItems();
+    }
+  });
+}
+
+// Auto-boot Vault when loaded directly via <script type="module" src="./js/vault.js">
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initVault);
+} else {
+  initVault();
 }
