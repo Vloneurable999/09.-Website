@@ -124,7 +124,7 @@ export default async function handler(req, res) {
       totalMembers: passNumber,
       member: {
         memberId: newMember.memberId,
-        role: newMember.role,
+        role: newMember.badges[0] || "member", // <--- Fix here
         badges: newMember.badges,
         handle: newMember.handle,
       },
