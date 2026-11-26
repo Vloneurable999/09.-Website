@@ -68,9 +68,9 @@ export const BADGE_PRIORITY = ["artist", "admin", "mod", "vip", "og", "member"];
  * Example: "#RV-0002": ["mod", "og"], "#RV-0003": ["vip", "og"]
  */
 
-// export const MEMBER_ID_ROLES = {
- // "#RV-0001": ["artist", "og", "member"],
-// };
+export const MEMBER_ID_ROLES = {
+  "#RV-0000": ["artist", "og", "member"],
+};
 
 /**
  * Resolves ALL collected badges for a member (stacking config overrides,

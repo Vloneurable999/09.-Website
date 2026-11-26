@@ -114,8 +114,8 @@ export default async function handler(req, res) {
       badgeSet.add("member");
     }
 
-    if (badgeSet.size === 0) {
-      badgeSet.add("member");
+    if (!user.badges.includes("member")) {
+      badgeSet.add("member"); 
     }
 
     const resolvedBadges = [...badgeSet].sort((a, b) => {
