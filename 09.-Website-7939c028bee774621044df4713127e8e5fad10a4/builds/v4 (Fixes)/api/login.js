@@ -12,19 +12,6 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB = process.env.MONGODB_DB || "raveyns_club";
 const OG_PROMO_CUTOFF = new Date("2026-12-01T23:59:59-06:00");
 const BADGE_PRIORITY = ["artist", "admin", "mod", "vip", "og", "member"];
-const LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const MAX_FAILED_LOGINS = 8; // Lock out brute-force attempts after 8 failures in 15 mins
-
-/**
- * Hashes client IP for brute-force rate limiting without storing raw IP addresses.
- */
-function getClientIpHash(req) {
-  const forwarded = req.headers["x-forwarded-for"];
-  const rawIp = Array.isArray(forwarded)
-    ? forwarded[0]
-    : String(forwarded || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
-  return crypto.createHash("sha256").update(rawIp).digest("hex").slice(0, 24);
-}
 
 /**
  * Reuse the MongoDB connection across warm Vercel serverless invocations.
@@ -89,40 +76,40 @@ export default async function handler(req, res) {
 
     const db = await getDatabase();
     const members = db.collection("members");
-    const securityLogs = db.collection("security_events");
-
-    const ipHash = getClientIpHash(req);
-    const bareUsername = rawIdentifier.replace(/^@+/, "");
-    const attemptKey = `${ipHash}:${bareUsername.toLowerCase()}`;
-
-    const recentFailures = await securityLogs.countDocuments({
-      type: "login_fail",
-      attemptKey,
-      createdAt: { $gte: new Date(Date.now() - LOGIN_WINDOW_MS) },
-    });
-    if (recentFailures >= MAX_FAILED_LOGINS) {
-      return res.status(429).json({
-        error: "Too many failed login attempts. Please wait 15 minutes and try again.",
-      });
-    }
 
     // Look up member by username/handle (case-insensitive, with or without @)
+    const bareUsername = rawIdentifier.replace(/^@+/, "");
     const escapedUsername = escapeRegex(bareUsername);
     const member = await members.findOne({
       handle: { $regex: `^@?${escapedUsername}$`, $options: "i" },
     });
 
     if (!member || !verifyPassword(cleanPassword, member.passwordHash)) {
-      await securityLogs.insertOne({
-        type: "login_fail",
-        attemptKey,
-        createdAt: new Date(),
-      });
       return res.status(401).json({ error: "Invalid username or password." });
     }
 
-    // Clear failed login attempts on successful sign-in
-    await securityLogs.deleteMany({ type: "login_fail", attemptKey });
+    // Collect and stack all badges saved on the member (plus backfill OG if joined by Dec 1st)
+    const badgeSet = new Set();
+    if (Array.isArray(member.badges)) {
+      member.badges.forEach((b) => {
+        if (b) badgeSet.add(String(b).trim().toLowerCase());
+      });
+    }
+    if (member.role) {
+      badgeSet.add(String(member.role).trim().toLowerCase());
+    }
+
+    const normalizedId = String(member.memberId || "").trim().toUpperCase();
+    const lowerHandle = String(member.handle || "").trim().toLowerCase();
+    if (
+      normalizedId === "#RV-0001" ||
+      lowerHandle === "@raveyn" ||
+      lowerHandle === "@itsraveyn"
+    ) {
+      badgeSet.add("artist");
+    }
+
+    const createdDate = member.createdAt ? new Date(member.createdAt) : null;
     if (!createdDate || Number.isNaN(createdDate.getTime()) || createdDate <= OG_PROMO_CUTOFF) {
       badgeSet.add("og");
     }
