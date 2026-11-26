@@ -120,9 +120,9 @@ export function getMemberBadges(memberId = "", dbBadges = [], handle = "") {
     });
   }
 
-  if (!user.badges.includes("member")) {
-    badgeSet.add("member"); 
-  }
+  //if (!user.badges.includes("member")) {
+    //badgeSet.add("member"); 
+  //}
 
   // Sort badges by priority so higher-tier badges always appear first
   const sortedKeys = [...badgeSet].sort((a, b) => {
