@@ -4,7 +4,7 @@
  * Edit your profile photo, share URL, API endpoints, and links here.
  * ============================================================================
  */
-export const ARTIST_AVATAR_URL = "./assets/PFP_v1.png";
+export const ARTIST_AVATAR_URL = "/assets/PFP_v1.png";
 export const SHARE_URL = "https://www.raveyns.com";
 
 /**
