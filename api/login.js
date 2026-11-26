@@ -114,10 +114,6 @@ export default async function handler(req, res) {
       badgeSet.add("member");
     }
 
-    if (!user.badges.includes("member")) {
-      badgeSet.add("member"); 
-    }
-
     const resolvedBadges = [...badgeSet].sort((a, b) => {
       const idxA = BADGE_PRIORITY.indexOf(a);
       const idxB = BADGE_PRIORITY.indexOf(b);
