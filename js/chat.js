@@ -114,8 +114,7 @@ function syncChatAuthUI(explicitMember) {
     form?.classList.remove("hidden");
     lockedPrompt?.classList.add("hidden");
     if (activeUserLabel) {
-      const idSuffix = member.memberId ? ` (${member.memberId})` : "";
-      activeUserLabel.textContent = `Posting as ${member.handle}${idSuffix}`;
+      activeUserLabel.textContent = `Posting as ${member.handle}`;
     }
   } else {
     form?.classList.add("hidden");
@@ -160,7 +159,7 @@ function renderMessages(messages, forceScroll = false) {
         member &&
         ((member.memberId && msg.memberId === member.memberId) ||
           String(msg.handle || "").toLowerCase() === String(member.handle || "").toLowerCase());
-      const badges =
+      const rawBadges =
         typeof config.getMemberBadges === "function"
           ? config.getMemberBadges(msg.memberId, msg.badges, msg.role, msg.handle)
           : [
@@ -177,10 +176,11 @@ function renderMessages(messages, forceScroll = false) {
                   },
             ];
 
-      const safeHandle = escapeHtml(msg.handle);
-      const safeId = escapeHtml(msg.memberId);
-      const safeText = escapeHtml(msg.text);
-      const timeLabel = formatTimestamp(msg.createdAt);
+      // Only the first badge (highest-tiered) is shown; update this logic if you want to display multiple badges.
+      const badges = rawBadges.length > 0 ? [rawBadges[0]] : [];
+      const safeHandle = escapeHtml(msg.handle ?? "");
+      const safeText = escapeHtml(msg.text ?? "");
+      const timeLabel = formatTimestamp(msg.createdAt) || "unknown";
 
       const stackedBadgesHtml = badges
         .map(
@@ -194,7 +194,6 @@ function renderMessages(messages, forceScroll = false) {
           <div class="flex items-center gap-1.5 mb-1 px-1 flex-wrap ${isMine ? "justify-end" : "justify-start"}">
             <span class="text-xs font-semibold ${isMine ? "text-fuchsia-200" : "text-zinc-200"}">${safeHandle}</span>
             ${stackedBadgesHtml}
-            <span class="font-mono text-[10px] text-zinc-500">${safeId}</span>
             <span class="font-mono text-[10px] text-zinc-600">· ${timeLabel}</span>
           </div>
           <div class="max-w-[85%] sm:max-w-[75%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words whitespace-pre-wrap ${
@@ -409,7 +408,7 @@ export function initChat() {
   // Also sync automatically if the user logs in/out in another browser tab
   window.addEventListener("storage", (event) => {
     if (event.key === STORAGE_KEY) {
-      cachedMember = null;
+    cachedMember = null;
       syncChatAuthUI();
       lastRenderedKey = "";
       fetchMessages({ silent: true, forceScroll: false });
