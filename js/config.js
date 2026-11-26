@@ -22,25 +22,35 @@ export const VAULT_API_URL = "/api/vault";
  */
 export const MEMBER_ROLES = {
   artist: {
-    label: "ARTIST ✦",
+    label: "raveyn",
     badgeClass: "bg-pink-500/20 text-pink-200 border-pink-400/40",
   },
+
+  florian: {
+    label: "florian",
+    badgeClass: "bg-pink-500/20 text-pink-200 border-pink-400/40",
+  },
+
   admin: {
     label: "ADMIN",
     badgeClass: "bg-rose-500/20 text-rose-200 border-rose-400/40",
   },
+
   mod: {
     label: "MOD",
     badgeClass: "bg-cyan-500/20 text-cyan-200 border-cyan-400/40",
   },
+
   vip: {
-    label: "VIP ✦",
+    label: "VIP",
     badgeClass: "bg-amber-500/20 text-amber-200 border-amber-400/40",
   },
+
   og: {
     label: "OG",
     badgeClass: "bg-purple-500/20 text-purple-200 border-purple-400/40",
   },
+
   member: {
     label: "CLUB MEMBER",
     badgeClass: "bg-white/[0.06] text-zinc-300 border-white/15",
@@ -90,6 +100,12 @@ export function getMemberBadges(memberId = "", dbBadges = [], dbRole = "", handl
     normalizedHandle === "@itsraveyn"
   ) {
     badgeSet.add("artist");
+  }
+
+   if (
+    normalizedHandle === "@florian"
+  ) {
+    badgeSet.add("florian");
   }
 
   // 3. Add all collected badges stored in MongoDB (badges array)
