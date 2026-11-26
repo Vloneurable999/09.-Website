@@ -111,7 +111,6 @@ export default async function handler(req, res) {
 
     const newMember = {
       memberId,
-      role: collectedBadges[0],
       badges: collectedBadges,
       handle: formattedHandle,
       passwordHash: hashPassword(cleanPassword),
