@@ -101,6 +101,7 @@ export default async function handler(req, res) {
     }
     if (now <= OG_PROMO_CUTOFF) {
       collectedBadges.push("og");
+      collectedBadges.push("member");
     }
     if (collectedBadges.length === 0) {
       collectedBadges.push("member");

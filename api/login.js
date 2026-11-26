@@ -112,6 +112,7 @@ export default async function handler(req, res) {
     const createdDate = member.createdAt ? new Date(member.createdAt) : null;
     if (!createdDate || Number.isNaN(createdDate.getTime()) || createdDate <= OG_PROMO_CUTOFF) {
       badgeSet.add("og");
+      badgeSet.add("member");
     }
     if (badgeSet.size > 1 && badgeSet.has("member")) {
       badgeSet.delete("member");
