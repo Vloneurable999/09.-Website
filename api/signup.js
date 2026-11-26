@@ -105,9 +105,9 @@ export default async function handler(req, res) {
       collectedBadges.push("og", "member");
     }
 
-    //if (collectedBadges.length === 0) {
-      //collectedBadges.push("member");
-    //}
+    if (collectedBadges.length === 0) {
+      collectedBadges.push("member");
+    }
 
     const newMember = {
       memberId,
@@ -119,12 +119,11 @@ export default async function handler(req, res) {
 
     await members.insertOne(newMember);
 
-    // Return safe member data (never return passwordHash)
+    // Return safe member data without any role property
     return res.status(201).json({
       totalMembers: passNumber,
       member: {
         memberId: newMember.memberId,
-        role: newMember.badges[0] || "member", // <--- Fix here
         badges: newMember.badges,
         handle: newMember.handle,
       },

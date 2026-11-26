@@ -76,7 +76,7 @@ export const BADGE_PRIORITY = ["artist", "admin", "mod", "vip", "og", "member"];
  * Resolves ALL collected badges for a member (stacking config overrides,
  * MongoDB badges array, legacy single role, and artist handle checks).
  */
-export function getMemberBadges(memberId = "", dbBadges = [], dbRole = "", handle = "") {
+export function getMemberBadges(memberId = "", dbBadges = [], handle = "") {
   const normalizedId = String(memberId || "").trim().toUpperCase();
   const normalizedHandle = String(handle || "").trim().toLowerCase();
   const badgeSet = new Set();
@@ -95,18 +95,21 @@ export function getMemberBadges(memberId = "", dbBadges = [], dbRole = "", handl
   // 2. Add Artist badge automatically for raveyn's official handles or #RV-0001
   const numMatch = normalizedId.match(/^#RV-(\d+)$/);
   const passNumber = numMatch ? parseInt(numMatch[1], 10) : 0;
+  
   if (
     passNumber === 1 ||
     normalizedHandle === "@raveyn" ||
     normalizedHandle === "@itsraveyn"
   ) {
     badgeSet.add("artist");
+    badgeSet.add("member");
   }
 
-   if (
+  if (
     normalizedHandle === "@florian"
   ) {
     badgeSet.add("florian");
+    badgeSet.add("member");
   }
 
   // 3. Add all collected badges stored in MongoDB (badges array)
@@ -117,18 +120,8 @@ export function getMemberBadges(memberId = "", dbBadges = [], dbRole = "", handl
     });
   }
 
-  // 4. Merge legacy single role field if present
-  const normalizedDbRole = String(dbRole || "").trim().toLowerCase();
-  if (normalizedDbRole && MEMBER_ROLES[normalizedDbRole]) {
-    badgeSet.add(normalizedDbRole);
-  }
-
-  // Only show "member" if no other badges have been collected yet
-  //if (badgeSet.size > 1 && badgeSet.has("member")) {
-    //badgeSet.delete("member");
-  //}
-  if (badgeSet.size === 0) {
-    badgeSet.add("member");
+  if (!user.badges.includes("member")) {
+    badgeSet.add("member"); 
   }
 
   // Sort badges by priority so higher-tier badges always appear first
@@ -144,8 +137,8 @@ export function getMemberBadges(memberId = "", dbBadges = [], dbRole = "", handl
 /**
  * Returns the primary (highest-priority) badge for backwards compatibility.
  */
-export function getMemberRole(memberId = "", dbRole = "", handle = "", dbBadges = []) {
-  return getMemberBadges(memberId, dbBadges, dbRole, handle)[0];
+export function getMemberRole(memberId = "", handle = "", dbBadges = []) {
+  return getMemberBadges(memberId, dbBadges, handle)[0];
 }
 
 /**

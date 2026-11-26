@@ -88,15 +88,12 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: "Invalid username or password." });
     }
 
-    // Collect and stack all badges saved on the member (plus backfill OG if joined by Dec 1st)
+    // Collect and stack all badges saved on the member
     const badgeSet = new Set();
     if (Array.isArray(member.badges)) {
       member.badges.forEach((b) => {
         if (b) badgeSet.add(String(b).trim().toLowerCase());
       });
-    }
-    if (member.role) {
-      badgeSet.add(String(member.role).trim().toLowerCase());
     }
 
     const normalizedId = String(member.memberId || "").trim().toUpperCase();
@@ -113,10 +110,10 @@ export default async function handler(req, res) {
     if (!createdDate || Number.isNaN(createdDate.getTime()) || createdDate <= OG_PROMO_CUTOFF) {
       badgeSet.add("og");
       badgeSet.add("member");
+    } else {
+      badgeSet.add("member");
     }
-    if (badgeSet.size > 1 && badgeSet.has("member")) {
-      badgeSet.delete("member");
-    }
+
     if (badgeSet.size === 0) {
       badgeSet.add("member");
     }
@@ -127,37 +124,30 @@ export default async function handler(req, res) {
       return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
     });
 
-    // Automatically upgrade old user documents in MongoDB so their badges persist
-    // and remove the deprecated optInDrops field if present
+    // Automatically upgrade old user documents in MongoDB to match the badge-only format
     const needsBadgeMigration =
       !Array.isArray(member.badges) ||
       member.badges.length !== resolvedBadges.length ||
       resolvedBadges.some((b, i) => member.badges[i] !== b) ||
-      member.role !== resolvedBadges[0];
-    const hasDeprecatedDrops = Object.prototype.hasOwnProperty.call(member, "optInDrops");
+      Object.prototype.hasOwnProperty.call(member, "role");
 
-    if (needsBadgeMigration || hasDeprecatedDrops) {
-      const updateDoc = {};
-      if (needsBadgeMigration) {
-        updateDoc.$set = {
-          badges: resolvedBadges,
-          role: resolvedBadges[0],
-        };
-      }
-      if (hasDeprecatedDrops) {
-        updateDoc.$unset = { optInDrops: "" };
-      }
-      await members.updateOne({ _id: member._id }, updateDoc);
+    if (needsBadgeMigration) {
+      await members.updateOne(
+        { _id: member._id },
+        {
+          $set: { badges: resolvedBadges },
+          $unset: { role: "" },
+        }
+      );
     }
 
     const totalMembers = await members.countDocuments();
 
-    // Return safe member data (never return passwordHash)
+    // Return safe member data (no role field)
     return res.status(200).json({
       totalMembers,
       member: {
         memberId: member.memberId,
-        role: resolvedBadges[0],
         badges: resolvedBadges,
         handle: member.handle,
       },
