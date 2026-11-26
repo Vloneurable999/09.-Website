@@ -163,7 +163,7 @@ export default async function handler(req, res) {
       createdAt: now,
     });
 
-    // Return safe member data (never return passwordHash)
+    // Return safe member data (never return passwordHash) meow
     return res.status(201).json({
       totalMembers: passNumber,
       member: {
