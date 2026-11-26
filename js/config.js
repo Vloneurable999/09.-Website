@@ -67,8 +67,9 @@ export const BADGE_PRIORITY = ["artist", "admin", "mod", "vip", "og", "member"];
  * Accepts a single badge key or an array of badge keys.
  * Example: "#RV-0002": ["mod", "og"], "#RV-0003": ["vip", "og"]
  */
+
 export const MEMBER_ID_ROLES = {
-  "#RV-0001": ["artist", "og"],
+  "#RV-0001": ["artist", "og", "member"],
 };
 
 /**

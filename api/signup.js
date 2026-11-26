@@ -96,13 +96,15 @@ export default async function handler(req, res) {
     const now = new Date();
     const lowerHandle = formattedHandle.toLowerCase();
     const collectedBadges = [];
+    
     if (passNumber === 1 || lowerHandle === "@raveyn" || lowerHandle === "@itsraveyn") {
       collectedBadges.push("artist");
     }
+
     if (now <= OG_PROMO_CUTOFF) {
-      collectedBadges.push("og");
-      collectedBadges.push("member");
+      collectedBadges.push("og", "member");
     }
+
     if (collectedBadges.length === 0) {
       collectedBadges.push("member");
     }
