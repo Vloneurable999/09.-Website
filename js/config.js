@@ -68,9 +68,9 @@ export const BADGE_PRIORITY = ["artist", "admin", "mod", "vip", "og", "member"];
  * Example: "#RV-0002": ["mod", "og"], "#RV-0003": ["vip", "og"]
  */
 
-export const MEMBER_ID_ROLES = {
-  "#RV-0001": ["artist", "og", "member"],
-};
+// export const MEMBER_ID_ROLES = {
+ // "#RV-0001": ["artist", "og", "member"],
+// };
 
 /**
  * Resolves ALL collected badges for a member (stacking config overrides,
@@ -124,9 +124,9 @@ export function getMemberBadges(memberId = "", dbBadges = [], dbRole = "", handl
   }
 
   // Only show "member" if no other badges have been collected yet
-  if (badgeSet.size > 1 && badgeSet.has("member")) {
-    badgeSet.delete("member");
-  }
+  //if (badgeSet.size > 1 && badgeSet.has("member")) {
+    //badgeSet.delete("member");
+  //}
   if (badgeSet.size === 0) {
     badgeSet.add("member");
   }
@@ -179,6 +179,15 @@ export const ARTIST_CONFIG = {
     },
   ],
   socials: [
+     {
+      name: "YouTube",
+      handle: "@raveyn",
+      url: "https://www.youtube.com/@raveyn",
+      accent: "hover:border-pink-400/50 hover:shadow-neon-pink",
+      iconBg: "from-pink-500/25 to-rose-500/20 text-pink-300",
+      icon: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>`,
+    },
+
     {
       name: "Instagram",
       handle: "@itsraveyn",
@@ -187,6 +196,7 @@ export const ARTIST_CONFIG = {
       iconBg: "from-pink-500/25 to-purple-500/20 text-pink-300",
       icon: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>`,
     },
+
     {
       name: "TikTok",
       handle: "@itsraveyn",
@@ -195,6 +205,7 @@ export const ARTIST_CONFIG = {
       iconBg: "from-fuchsia-500/25 to-purple-500/20 text-fuchsia-300",
       icon: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"/></svg>`,
     },
+
     {
       name: "Threads",
       handle: "@itsraveyn",
@@ -202,14 +213,6 @@ export const ARTIST_CONFIG = {
       accent: "hover:border-purple-400/50 hover:shadow-neon-purple",
       iconBg: "from-purple-500/25 to-indigo-500/20 text-purple-300",
       icon: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"></path></svg>`,
-    },
-    {
-      name: "YouTube",
-      handle: "@raveyn",
-      url: "https://www.youtube.com/@raveyn",
-      accent: "hover:border-pink-400/50 hover:shadow-neon-pink",
-      iconBg: "from-pink-500/25 to-rose-500/20 text-pink-300",
-      icon: `<svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>`,
-    },
+    }
   ],
 };

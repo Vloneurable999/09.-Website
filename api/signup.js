@@ -97,17 +97,17 @@ export default async function handler(req, res) {
     const lowerHandle = formattedHandle.toLowerCase();
     const collectedBadges = [];
     
-    if (passNumber === 1 || lowerHandle === "@raveyn" || lowerHandle === "@itsraveyn") {
-      collectedBadges.push("artist");
-    }
+    // if (passNumber === 1 || lowerHandle === "@raveyn" || lowerHandle === "@itsraveyn") {
+      // collectedBadges.push("artist");
+    // }
 
     if (now <= OG_PROMO_CUTOFF) {
       collectedBadges.push("og", "member");
     }
 
-    if (collectedBadges.length === 0) {
-      collectedBadges.push("member");
-    }
+    //if (collectedBadges.length === 0) {
+      //collectedBadges.push("member");
+    //}
 
     const newMember = {
       memberId,
