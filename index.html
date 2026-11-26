@@ -45,6 +45,7 @@
       overflow-x: hidden;
       -webkit-text-size-adjust: 100%;
     }
+
     /* Prevent mobile Safari/Chrome from auto-zooming when tapping form inputs */
     @media (max-width: 768px) {
       input,
@@ -52,6 +53,11 @@
       textarea {
         font-size: 16px !important;
       }
+    }
+
+    /* Collapse unfilled AdSense slots so they don't leave giant empty boxes */
+    ins.adsbygoogle[data-ad-status="unfilled"] {
+      display: none !important;
     }
   </style>
 </head>
@@ -297,23 +303,23 @@
       <div id="musicGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-3.5"></div>
     </section>
 
-    <!-- Advertisement Card with Fallback -->
+    <!-- Advertisement Card with Dynamic Sizing -->
     <section class="my-6">
       <div class="relative overflow-hidden rounded-3xl bg-white/[0.03] backdrop-blur-xl border border-white/10 p-4 sm:p-6 shadow-xl text-center">
         <div aria-hidden="true" class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-fuchsia-400/40 to-transparent"></div>
         <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500 mb-3">Sponsored ✦</p>
         
-        <!-- Ad Container -->
-        <div id="adContainer" class="flex justify-center overflow-x-auto min-h-[90px] w-full">
+        <!-- Ad Container (No forced min-height, hidden automatically if fallback shows) -->
+        <div id="adContainer" class="w-full overflow-hidden">
           <ins class="adsbygoogle"
-            style="display:block; min-width: 250px;"
+            style="display:block; width: 100%;"
             data-ad-client="ca-pub-2392636193008357"
             data-ad-slot="7002299606"
             data-ad-format="auto"
             data-full-width-responsive="true"></ins>
         </div>
 
-        <!-- Fallback Banner (Hidden by default, shown if ad is blocked/empty) -->
+        <!-- Fallback Banner -->
         <div id="adFallback" class="hidden py-4 px-3 rounded-2xl bg-white/[0.02] border border-dashed border-fuchsia-500/20 text-center">
           <p class="font-mono text-xs text-fuchsia-300">✦ Support raveyn's club ✦</p>
           <p class="text-[11px] text-zinc-400 mt-1">Ads are currently blocked or unavailable by your browser settings.</p>
@@ -322,13 +328,14 @@
         <script>
           (adsbygoogle = window.adsbygoogle || []).push({});
           
-          // Fallback Detection Check
           window.addEventListener('load', function() {
             setTimeout(function() {
               const adIns = document.querySelector('.adsbygoogle');
+              const adContainer = document.getElementById('adContainer');
               const fallback = document.getElementById('adFallback');
-              // If AdSense didn't fill the slot or height remains 0/unloaded
-              if (adIns && (adIns.getAttribute('data-ad-status') === 'unfilled' || adIns.offsetHeight === 0)) {
+              
+              if (!adIns || adIns.getAttribute('data-ad-status') === 'unfilled' || adIns.offsetHeight === 0) {
+                adContainer.classList.add('hidden');
                 fallback.classList.remove('hidden');
               }
             }, 1500);
